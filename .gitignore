@@ -43,6 +43,7 @@ temp/
 .bmad/
 .claude/
 .cursor/
+.mcp.json
 
 # Database
 *.db
