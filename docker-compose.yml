@@ -1,0 +1,96 @@
+services:
+  # Redis - Task Queue
+  redis:
+    image: redis:7-alpine
+    container_name: video-compilation-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Backend - FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: video-compilation-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - /app/venv  # Exclude venv from mounting
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Celery Worker - Video Processing
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: video-compilation-celery
+    command: celery -A workers.celery_app worker --loglevel=info
+    volumes:
+      - ./backend:/app
+      - /app/venv
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
+  # Frontend - Vite Dev Server
+  frontend:
+    build:
+      context: ./frontend/video-compilation2.0
+      dockerfile: Dockerfile
+      target: development
+    container_name: video-compilation-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/video-compilation2.0:/app
+      - /app/node_modules  # Exclude node_modules from mounting
+    env_file:
+      - ./frontend/video-compilation2.0/.env
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    networks:
+      - app-network
+    stdin_open: true
+    tty: true
+    restart: unless-stopped
+
+volumes:
+  redis_data:
+
+networks:
+  app-network:
+    driver: bridge
