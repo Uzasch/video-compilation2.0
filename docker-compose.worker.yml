@@ -1,0 +1,33 @@
+services:
+  # Celery Worker - Connects to PC1's Redis
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: video-compilation-celery-worker
+    command: celery -A workers.celery_app worker --loglevel=info --hostname=worker@%h
+    volumes:
+      - ./backend:/app
+      - /app/venv
+      - ./logs:/app/logs
+      - ./temp:/app/temp
+      # Mount SMB share for video access (Windows path)
+      # Note: On Windows, use the host's mounted network drive
+      # Make sure \\192.168.1.6\Share3 is accessible from the host
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_URL=redis://192.168.1.104:6379/0  # Point to PC1's Redis
+      - PYTHONUNBUFFERED=1
+      - WORKER_NAME=${HOSTNAME}
+    restart: unless-stopped
+    network_mode: host
+    # GPU support (if needed for hardware acceleration)
+    # Uncomment the following for NVIDIA GPU access:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]

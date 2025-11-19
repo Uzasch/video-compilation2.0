@@ -3,13 +3,18 @@
 ## Objective
 Create and configure all Supabase tables, enable real-time subscriptions, and set up row-level security.
 
+**Note**: We use Supabase Auth (`auth.users`) + custom `profiles` table for future-proofing. Authentication can be enabled/enhanced later.
+
 ---
 
 ## 1. Create Supabase Project
 
 1. Go to https://supabase.com
 2. Create new project: `ybh-video-compilation`
-3. Note down:
+3. **Disable email confirmation** (for simple login now):
+   - Go to Authentication → Settings
+   - Uncheck "Enable email confirmations"
+4. Note down:
    - Project URL
    - Anon/Public key
    - Service role key (for backend)
@@ -27,44 +32,61 @@ Go to Supabase Dashboard → SQL Editor → New Query
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================================================
--- USERS TABLE
+-- PROFILES TABLE (Links to auth.users)
 -- ============================================================================
-CREATE TABLE users (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+CREATE TABLE profiles (
+  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   username TEXT UNIQUE NOT NULL,
   display_name TEXT,
   role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Insert default admin user
-INSERT INTO users (username, display_name, role) VALUES
-  ('admin', 'Administrator', 'admin');
+-- Auto-create profile when auth user is created
+CREATE OR REPLACE FUNCTION handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO profiles (id, username, display_name, role)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'username', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)),
+    COALESCE(NEW.raw_user_meta_data->>'role', 'user')
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION handle_new_user();
 
 -- ============================================================================
 -- JOBS TABLE
 -- ============================================================================
 CREATE TABLE jobs (
   job_id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES users(id),
+  user_id UUID REFERENCES profiles(id),
   channel_name TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('queued', 'processing', 'completed', 'failed', 'cancelled')),
   progress INTEGER DEFAULT 0 CHECK (progress >= 0 AND progress <= 100),
+  progress_message TEXT,   -- Current processing step (e.g., "Copying files (3/10)", "Processing video: 2m 15s / 10m 30s")
 
-  -- Job configuration
-  has_intro BOOLEAN DEFAULT false,
-  has_end_packaging BOOLEAN DEFAULT false,
-  has_logo BOOLEAN DEFAULT false,
+  -- Default logo (from channel, used to populate all videos initially)
+  default_logo_path TEXT,
 
   -- Features
   enable_4k BOOLEAN DEFAULT false,
-  text_animation_enabled BOOLEAN DEFAULT false,
-  text_animation_words TEXT[], -- Array of words for animation
 
   -- Results
   output_path TEXT,
   final_duration FLOAT,
   error_message TEXT,
+
+  -- Production move
+  production_path TEXT,
+  moved_to_production BOOLEAN DEFAULT false,
+  production_moved_at TIMESTAMPTZ,
 
   -- Worker info
   worker_id TEXT,
@@ -86,23 +108,36 @@ CREATE INDEX idx_jobs_created_at ON jobs(created_at DESC);
 CREATE INDEX idx_jobs_channel_name ON jobs(channel_name);
 
 -- ============================================================================
--- JOB VIDEOS TABLE
+-- JOB ITEMS TABLE (Unified: intro, videos, transitions, outro, images)
 -- ============================================================================
-CREATE TABLE job_videos (
+CREATE TABLE job_items (
   id BIGSERIAL PRIMARY KEY,
   job_id UUID REFERENCES jobs(job_id) ON DELETE CASCADE,
 
-  -- Video identification
-  video_id TEXT,
-  video_path TEXT,
-
-  -- Position in compilation
+  -- Position in sequence (determines order: 1, 2, 3...)
   position INTEGER NOT NULL,
 
-  -- Video metadata
-  duration FLOAT,
+  -- Item type
+  item_type TEXT NOT NULL CHECK (item_type IN ('intro', 'video', 'transition', 'outro', 'image')),
+
+  -- For videos
+  video_id TEXT,           -- YouTube ID or BigQuery ID
+  title TEXT,              -- Fetched from BigQuery video_title column OR user-provided for images
+
+  -- Path (for all types)
+  path TEXT,
+  path_available BOOLEAN DEFAULT false,  -- True if file exists and verified
+
+  -- Per-video logo (each video can have different logo)
+  logo_path TEXT,
+
+  -- Metadata
+  duration FLOAT,          -- Video duration OR user-specified display time for images
   resolution TEXT,
   is_4k BOOLEAN DEFAULT false,
+
+  -- Per-video text animation
+  text_animation_words TEXT[],  -- Only for videos, can be different per video
 
   -- Processing
   filters TEXT,
@@ -112,32 +147,10 @@ CREATE TABLE job_videos (
   UNIQUE(job_id, position)
 );
 
--- Indexes for job_videos
-CREATE INDEX idx_job_videos_job_id ON job_videos(job_id);
-CREATE INDEX idx_job_videos_position ON job_videos(job_id, position);
-
--- ============================================================================
--- JOB PACKAGING INSERTS TABLE
--- ============================================================================
-CREATE TABLE job_packaging_inserts (
-  id BIGSERIAL PRIMARY KEY,
-  job_id UUID REFERENCES jobs(job_id) ON DELETE CASCADE,
-
-  -- Insert position (after which video position)
-  insert_after_position INTEGER NOT NULL,
-
-  -- Packaging video
-  packaging_video_id TEXT,
-  packaging_video_path TEXT,
-  packaging_name TEXT,
-
-  duration FLOAT,
-
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Indexes for packaging inserts
-CREATE INDEX idx_packaging_job_id ON job_packaging_inserts(job_id);
+-- Indexes for job_items
+CREATE INDEX idx_job_items_job_id ON job_items(job_id);
+CREATE INDEX idx_job_items_position ON job_items(job_id, position);
+CREATE INDEX idx_job_items_type ON job_items(job_id, item_type);
 
 -- ============================================================================
 -- COMPILATION HISTORY TABLE
@@ -145,7 +158,7 @@ CREATE INDEX idx_packaging_job_id ON job_packaging_inserts(job_id);
 CREATE TABLE compilation_history (
   id BIGSERIAL PRIMARY KEY,
   job_id UUID REFERENCES jobs(job_id),
-  user_id UUID REFERENCES users(id),
+  user_id UUID REFERENCES profiles(id),
   channel_name TEXT,
 
   video_count INTEGER,
@@ -172,29 +185,28 @@ ALTER PUBLICATION supabase_realtime ADD TABLE jobs;
 
 ```sql
 -- Enable RLS on all tables
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE jobs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE job_videos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE job_packaging_inserts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE compilation_history ENABLE ROW LEVEL SECURITY;
 
 -- ============================================================================
--- USERS TABLE POLICIES
+-- PROFILES TABLE POLICIES
 -- ============================================================================
 
--- Users can read their own data
-CREATE POLICY "Users can view own data"
-  ON users FOR SELECT
-  USING (true);  -- Allow all authenticated users to view
+-- Users can read all profiles (for user dropdown)
+CREATE POLICY "Users can view all profiles"
+  ON profiles FOR SELECT
+  USING (true);
 
 -- Only admins can update user roles
-CREATE POLICY "Admins can update users"
-  ON users FOR UPDATE
+CREATE POLICY "Admins can update profiles"
+  ON profiles FOR UPDATE
   USING (
     EXISTS (
-      SELECT 1 FROM users
-      WHERE users.id = auth.uid()
-      AND users.role = 'admin'
+      SELECT 1 FROM profiles
+      WHERE profiles.id = auth.uid()
+      AND profiles.role = 'admin'
     )
   );
 
@@ -206,7 +218,7 @@ CREATE POLICY "Admins can update users"
 CREATE POLICY "Users can view own jobs"
   ON jobs FOR SELECT
   USING (user_id = auth.uid() OR
-         EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'));
+         EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'));
 
 -- Users can create jobs
 CREATE POLICY "Users can create jobs"
@@ -217,57 +229,52 @@ CREATE POLICY "Users can create jobs"
 CREATE POLICY "Users can update own jobs"
   ON jobs FOR UPDATE
   USING (user_id = auth.uid() OR
-         EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'));
+         EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'));
 
 -- Service role can update any job (for workers)
 -- This will be handled via service_role key from backend
 
 -- ============================================================================
--- JOB VIDEOS POLICIES
+-- JOB ITEMS POLICIES
 -- ============================================================================
 
-CREATE POLICY "Users can view job videos for their jobs"
-  ON job_videos FOR SELECT
+CREATE POLICY "Users can view job items for their jobs"
+  ON job_items FOR SELECT
   USING (
     EXISTS (
       SELECT 1 FROM jobs
-      WHERE jobs.job_id = job_videos.job_id
+      WHERE jobs.job_id = job_items.job_id
       AND (jobs.user_id = auth.uid() OR
-           EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'))
+           EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'))
     )
   );
 
-CREATE POLICY "Users can insert job videos for their jobs"
-  ON job_videos FOR INSERT
+CREATE POLICY "Users can insert job items for their jobs"
+  ON job_items FOR INSERT
   WITH CHECK (
     EXISTS (
       SELECT 1 FROM jobs
-      WHERE jobs.job_id = job_videos.job_id
+      WHERE jobs.job_id = job_items.job_id
       AND jobs.user_id = auth.uid()
     )
   );
 
--- ============================================================================
--- PACKAGING INSERTS POLICIES
--- ============================================================================
-
-CREATE POLICY "Users can view packaging for their jobs"
-  ON job_packaging_inserts FOR SELECT
+CREATE POLICY "Users can update job items for their jobs"
+  ON job_items FOR UPDATE
   USING (
     EXISTS (
       SELECT 1 FROM jobs
-      WHERE jobs.job_id = job_packaging_inserts.job_id
-      AND (jobs.user_id = auth.uid() OR
-           EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'))
+      WHERE jobs.job_id = job_items.job_id
+      AND jobs.user_id = auth.uid()
     )
   );
 
-CREATE POLICY "Users can insert packaging for their jobs"
-  ON job_packaging_inserts FOR INSERT
-  WITH CHECK (
+CREATE POLICY "Users can delete job items for their jobs"
+  ON job_items FOR DELETE
+  USING (
     EXISTS (
       SELECT 1 FROM jobs
-      WHERE jobs.job_id = job_packaging_inserts.job_id
+      WHERE jobs.job_id = job_items.job_id
       AND jobs.user_id = auth.uid()
     )
   );
@@ -279,7 +286,7 @@ CREATE POLICY "Users can insert packaging for their jobs"
 CREATE POLICY "Users can view own history"
   ON compilation_history FOR SELECT
   USING (user_id = auth.uid() OR
-         EXISTS (SELECT 1 FROM users WHERE users.id = auth.uid() AND users.role = 'admin'));
+         EXISTS (SELECT 1 FROM profiles WHERE profiles.id = auth.uid() AND profiles.role = 'admin'));
 
 CREATE POLICY "Users can insert own history"
   ON compilation_history FOR INSERT
@@ -328,19 +335,32 @@ CREATE TRIGGER trigger_insert_compilation_history
 
 ---
 
-## 5. Test Data (Optional)
+## 5. Create Initial Users (Via Supabase Auth)
 
+**Option A: Via Supabase Dashboard**
+1. Go to Authentication → Users → Add User
+2. Email: `admin@local.dev`
+3. Password: `admin123`
+4. Auto Confirm User: ✅ (check this)
+5. User Metadata (click "Add field"):
+```json
+{
+  "username": "admin",
+  "display_name": "Administrator",
+  "role": "admin"
+}
+```
+
+**Option B: Via SQL (using admin API)**
 ```sql
--- Insert test user
-INSERT INTO users (username, display_name, role) VALUES
-  ('uzair', 'Uzair', 'admin'),
-  ('testuser', 'Test User', 'user');
+-- Note: This requires service_role key in backend
+-- Create admin user programmatically from backend later
+```
 
--- Insert test job
-INSERT INTO jobs (user_id, channel_name, status, progress)
-SELECT id, 'TestChannel', 'queued', 0
-FROM users WHERE username = 'uzair'
-LIMIT 1;
+**Verify profile was created:**
+```sql
+SELECT * FROM profiles;
+-- Should see profile auto-created by trigger
 ```
 
 ---
@@ -356,8 +376,8 @@ FROM information_schema.tables
 WHERE table_schema = 'public'
 ORDER BY table_name;
 
--- Check users
-SELECT * FROM users;
+-- Check profiles
+SELECT * FROM profiles;
 
 -- Check RLS is enabled
 SELECT tablename, rowsecurity

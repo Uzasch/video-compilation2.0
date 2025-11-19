@@ -64,11 +64,11 @@ from api.config import get_settings
 def setup_job_logger(job_id: str, username: str, channel_name: str):
     """
     Create structured logger for each job.
-    Log path: logs/{date}/{username}/{channel_name}_{job_id}.log
+    Log path: logs/{date}/{username}/jobs/{channel_name}_{job_id}.log
     """
     settings = get_settings()
     date_str = datetime.now().strftime('%Y-%m-%d')
-    log_dir = Path(settings.log_dir) / date_str / username
+    log_dir = Path(settings.log_dir) / date_str / username / "jobs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     log_file = log_dir / f"{channel_name}_{job_id}.log"
@@ -364,6 +364,174 @@ def build_4k_compilation_command(
     ])
 
     return cmd
+
+
+def build_unified_compilation_command(
+    job_items: List[Dict],
+    output_path: str,
+    enable_4k: bool = False
+) -> List[str]:
+    """
+    Build FFmpeg command for unified sequence compilation.
+    Supports intro, videos, transitions, outro, and images.
+
+    Args:
+        job_items: List of job items from job_items table (ordered by position)
+        output_path: Output file path
+        enable_4k: Force 4K output resolution
+
+    Returns:
+        FFmpeg command as list of strings
+    """
+    cmd = ['ffmpeg']
+
+    inputs = []
+    filter_complex = []
+
+    # Target resolution
+    target_width = 3840 if enable_4k else 1920
+    target_height = 2160 if enable_4k else 1080
+
+    # Process each item
+    for i, item in enumerate(job_items):
+        item_type = item['item_type']
+        path = item['path']
+
+        if item_type == 'image':
+            # Image as video segment
+            duration = item.get('duration', 5)
+            inputs.extend([
+                '-loop', '1',
+                '-t', str(duration),
+                '-i', path
+            ])
+
+            # Scale image and add padding
+            filter_complex.append(
+                f"[{i}:v]scale={target_width}:{target_height}:"
+                f"force_original_aspect_ratio=decrease,"
+                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2,"
+                f"fps=30[v{i}_scaled]"
+            )
+
+            # Create silent audio for image
+            filter_complex.append(
+                f"anullsrc=channel_layout=stereo:sample_rate=44100,"
+                f"atrim=duration={duration}[a{i}]"
+            )
+
+            # Set video stream for logo overlay check
+            video_stream = f"[v{i}_scaled]"
+
+        else:
+            # Regular video (intro, video, transition, outro)
+            inputs.extend(['-i', path])
+
+            # Scale and pad video
+            filter_complex.append(
+                f"[{i}:v]scale={target_width}:{target_height}:"
+                f"force_original_aspect_ratio=decrease,"
+                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2[v{i}_scaled]"
+            )
+
+            video_stream = f"[v{i}_scaled]"
+
+        # Add logo overlay for videos (not intro, outro, transition, image)
+        if item_type == 'video' and item.get('logo_path'):
+            logo_path = item['logo_path']
+            inputs.extend(['-i', logo_path])
+            logo_index = len(inputs) // 2 - 1  # Calculate actual input index
+
+            filter_complex.append(
+                f"{video_stream}[{logo_index}:v]overlay=W-w-10:10[v{i}_logo]"
+            )
+            video_stream = f"[v{i}_logo]"
+
+        # Add text animation for videos
+        if item_type == 'video' and item.get('text_animation_words'):
+            words = item['text_animation_words']
+            text_filter = build_text_animation_filter(video_stream, words, i)
+            filter_complex.append(text_filter)
+            video_stream = f"[v{i}_text]"
+
+        # Rename final video stream
+        filter_complex.append(f"{video_stream}null[v{i}]")
+
+        # Handle audio stream
+        if item_type == 'image':
+            # Silent audio already created above
+            pass
+        else:
+            # Use original audio
+            filter_complex.append(f"[{i}:a]anull[a{i}]")
+
+    # Concatenate all segments
+    video_inputs = ''.join([f"[v{i}]" for i in range(len(job_items))])
+    audio_inputs = ''.join([f"[a{i}]" for i in range(len(job_items))])
+    filter_complex.append(
+        f"{video_inputs}{audio_inputs}concat=n={len(job_items)}:v=1:a=1[outv][outa]"
+    )
+
+    # Join filters
+    cmd.extend(['-filter_complex', ';'.join(filter_complex)])
+
+    # Map output streams
+    cmd.extend(['-map', '[outv]', '-map', '[outa]'])
+
+    # Encoding settings
+    if enable_4k:
+        cmd.extend([
+            '-c:v', 'libx264',
+            '-preset', 'slow',
+            '-crf', '21',
+            '-c:a', 'aac',
+            '-b:a', '256k',
+        ])
+    else:
+        cmd.extend([
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', '23',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+        ])
+
+    cmd.extend([
+        '-movflags', '+faststart',
+        '-y',
+        output_path
+    ])
+
+    return cmd
+
+
+def build_text_animation_filter(input_stream: str, words: List[str], item_index: int) -> str:
+    """
+    Build drawtext filter for word-by-word text animation.
+
+    Args:
+        input_stream: Input video stream label (e.g., "[v0_logo]")
+        words: List of words to animate
+        item_index: Index of the item (for output labeling)
+
+    Returns:
+        FFmpeg drawtext filter string
+    """
+    # Simple text animation - show all words at once for now
+    # TODO: Implement word-by-word reveal based on timing
+    text = ' '.join(words)
+
+    return (
+        f"{input_stream}drawtext="
+        f"fontfile=/Windows/Fonts/arial.ttf:"
+        f"text='{text}':"
+        f"fontsize=50:"
+        f"fontcolor=yellow:"
+        f"x=(w-text_w)/2:"
+        f"y=h-100:"
+        f"borderw=2:"
+        f"bordercolor=black[v{item_index}_text]"
+    )
 ```
 
 ---

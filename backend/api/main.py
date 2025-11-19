@@ -1,39 +1,66 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+from pathlib import Path
 
+from api.config import get_settings
+from api.routes import auth, jobs, queue, history, admin
+
+settings = get_settings()
+
+# Initialize FastAPI
 app = FastAPI(
-    title="Video Compilation Tool API",
-    description="Backend API for YBH Video Compilation Tool",
-    version="1.0.0"
+    title="YBH Video Compilation API",
+    description="API for distributed video compilation system",
+    version="2.0.0"
 )
 
-# CORS middleware
+# CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001", "http://localhost:3002"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Video Compilation Tool API",
-        "status": "running",
-        "version": "1.0.0"
-    }
+# Include routers
+app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
+app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
+app.include_router(queue.router, prefix="/api/queue", tags=["Queue"])
+app.include_router(history.router, prefix="/api/history", tags=["History"])
+app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
 
+# Health check
 @app.get("/health")
 async def health_check():
     return {
-        "status": "healthy",
-        "service": "backend"
+        "status": "ok",
+        "service": "YBH Video Compilation API",
+        "version": "2.0.0"
     }
 
-@app.get("/api/test")
-async def test_endpoint():
-    return {
-        "message": "API is working!",
-        "endpoint": "/api/test"
-    }
+# Serve frontend (production)
+public_path = Path(__file__).parent.parent / "public"
+if public_path.exists():
+    app.mount("/assets", StaticFiles(directory=public_path / "assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # Serve index.html for all non-API routes
+        if not full_path.startswith("api/") and not full_path.startswith("ws/"):
+            index_path = public_path / "index.html"
+            if index_path.exists():
+                return FileResponse(index_path)
+        return {"error": "Not found"}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "api.main:app",
+        host=settings.server_host,
+        port=settings.server_port,
+        reload=True
+    )
