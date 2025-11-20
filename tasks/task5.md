@@ -206,193 +206,46 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
 from typing import List, Dict
 from pathlib import Path
 
-def build_standard_compilation_command(
-    video_paths: List[str],
-    output_path: str,
-    logo_path: str = None,
-    intro_path: str = None,
-    end_packaging_path: str = None,
-    enable_4k: bool = False
-) -> List[str]:
-    """
-    Build FFmpeg command for standard video compilation.
-
-    Args:
-        video_paths: List of video file paths
-        output_path: Output file path
-        logo_path: Optional logo overlay path
-        intro_path: Optional intro video path
-        end_packaging_path: Optional end packaging video path
-        enable_4k: Force 4K output resolution
-    """
-    cmd = ['ffmpeg']
-
-    # Input files
-    all_inputs = []
-
-    if intro_path:
-        all_inputs.append(intro_path)
-
-    all_inputs.extend(video_paths)
-
-    if end_packaging_path:
-        all_inputs.append(end_packaging_path)
-
-    # Add inputs to command
-    for input_path in all_inputs:
-        cmd.extend(['-i', input_path])
-
-    # Add logo as overlay if specified
-    if logo_path:
-        cmd.extend(['-i', logo_path])
-
-    # Build filter complex
-    filters = []
-    current_index = 0
-
-    # Target resolution
-    target_width = 3840 if enable_4k else 1920
-    target_height = 2160 if enable_4k else 1080
-
-    # Scale and pad each input video
-    for i in range(len(all_inputs)):
-        filters.append(
-            f"[{i}:v]scale={target_width}:{target_height}:"
-            f"force_original_aspect_ratio=decrease,"
-            f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2[v{i}]"
-        )
-
-    # Concatenate videos
-    concat_inputs = ''.join([f"[v{i}]" for i in range(len(all_inputs))])
-    filters.append(f"{concat_inputs}concat=n={len(all_inputs)}:v=1:a=1[outv][outa]")
-
-    # Add logo overlay if specified
-    if logo_path:
-        logo_index = len(all_inputs)
-        filters.append(
-            f"[outv][{logo_index}:v]overlay=W-w-10:10[finalv]"
-        )
-        video_output = "[finalv]"
-    else:
-        video_output = "[outv]"
-
-    # Join filters
-    filter_complex = ';'.join(filters)
-    cmd.extend(['-filter_complex', filter_complex])
-
-    # Map output
-    cmd.extend(['-map', video_output])
-    cmd.extend(['-map', '[outa]'])
-
-    # Output encoding settings
-    cmd.extend([
-        '-c:v', 'libx264',
-        '-preset', 'medium',
-        '-crf', '23',
-        '-c:a', 'aac',
-        '-b:a', '192k',
-        '-movflags', '+faststart',
-        '-y',  # Overwrite output
-        output_path
-    ])
-
-    return cmd
-
-def build_4k_compilation_command(
-    video_paths: List[str],
-    output_path: str,
-    logo_path: str = None,
-    stretch_to_4k: bool = False
-) -> List[str]:
-    """
-    Build FFmpeg command for 4K video compilation.
-    Uses higher quality settings and handles 4K resolution properly.
-    """
-    cmd = ['ffmpeg']
-
-    # Input files
-    for path in video_paths:
-        cmd.extend(['-i', path])
-
-    if logo_path:
-        cmd.extend(['-i', logo_path])
-
-    # Build filters
-    filters = []
-
-    for i in range(len(video_paths)):
-        if stretch_to_4k:
-            # Force upscale to 4K
-            filters.append(
-                f"[{i}:v]scale=3840:2160:flags=lanczos[v{i}]"
-            )
-        else:
-            # Maintain aspect ratio, pad if needed
-            filters.append(
-                f"[{i}:v]scale=3840:2160:force_original_aspect_ratio=decrease,"
-                f"pad=3840:2160:(ow-iw)/2:(oh-ih)/2[v{i}]"
-            )
-
-    # Concatenate
-    concat_inputs = ''.join([f"[v{i}]" for i in range(len(video_paths))])
-    filters.append(f"{concat_inputs}concat=n={len(video_paths)}:v=1:a=1[outv][outa]")
-
-    # Logo overlay
-    if logo_path:
-        logo_index = len(video_paths)
-        filters.append(f"[outv][{logo_index}:v]overlay=W-w-20:20[finalv]")
-        video_output = "[finalv]"
-    else:
-        video_output = "[outv]"
-
-    filter_complex = ';'.join(filters)
-    cmd.extend(['-filter_complex', filter_complex])
-
-    cmd.extend(['-map', video_output])
-    cmd.extend(['-map', '[outa]'])
-
-    # 4K encoding settings (higher quality)
-    cmd.extend([
-        '-c:v', 'libx264',
-        '-preset', 'slow',  # Better quality for 4K
-        '-crf', '21',  # Higher quality
-        '-c:a', 'aac',
-        '-b:a', '256k',  # Higher audio bitrate
-        '-movflags', '+faststart',
-        '-y',
-        output_path
-    ])
-
-    return cmd
-
 
 def build_unified_compilation_command(
     job_items: List[Dict],
     output_path: str,
+    job_id: str,
     enable_4k: bool = False
 ) -> List[str]:
     """
     Build FFmpeg command for unified sequence compilation.
-    Supports intro, videos, transitions, outro, and images.
+    Handles mixed resolutions, per-video logos, and per-video text animation.
+
+    Features:
+    - Scales and pads videos/images to target resolution (maintains aspect ratio)
+    - Adds black padding for 16:9 ratio
+    - Supports per-video logos (overlaid at top-right)
+    - Supports per-video text animation using ASS subtitles
+    - Processes all item types: intro, video, transition, outro, image
 
     Args:
         job_items: List of job items from job_items table (ordered by position)
         output_path: Output file path
-        enable_4k: Force 4K output resolution
+        job_id: Job ID (for temp ASS file paths)
+        enable_4k: Force 4K output resolution (default: Full HD)
 
     Returns:
         FFmpeg command as list of strings
     """
     cmd = ['ffmpeg']
 
-    inputs = []
-    filter_complex = []
+    # Track input index separately (since logos and ASS files add extra inputs)
+    input_index = 0
+    item_input_indices = []  # Maps item position to its input index
 
     # Target resolution
     target_width = 3840 if enable_4k else 1920
     target_height = 2160 if enable_4k else 1080
 
-    # Process each item
+    filter_complex = []
+
+    # First pass: Add all video/image inputs
     for i, item in enumerate(job_items):
         item_type = item['item_type']
         path = item['path']
@@ -400,17 +253,30 @@ def build_unified_compilation_command(
         if item_type == 'image':
             # Image as video segment
             duration = item.get('duration', 5)
-            inputs.extend([
+            cmd.extend([
                 '-loop', '1',
                 '-t', str(duration),
                 '-i', path
             ])
+        else:
+            # Regular video (intro, video, transition, outro)
+            cmd.extend(['-i', path])
 
+        item_input_indices.append(input_index)
+        input_index += 1
+
+    # Second pass: Process each item with filters
+    for i, item in enumerate(job_items):
+        item_type = item['item_type']
+        item_input_idx = item_input_indices[i]
+
+        if item_type == 'image':
             # Scale image and add padding
+            duration = item.get('duration', 5)
             filter_complex.append(
-                f"[{i}:v]scale={target_width}:{target_height}:"
+                f"[{item_input_idx}:v]scale={target_width}:{target_height}:"
                 f"force_original_aspect_ratio=decrease,"
-                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2,"
+                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:black,"
                 f"fps=30[v{i}_scaled]"
             )
 
@@ -420,18 +286,14 @@ def build_unified_compilation_command(
                 f"atrim=duration={duration}[a{i}]"
             )
 
-            # Set video stream for logo overlay check
             video_stream = f"[v{i}_scaled]"
 
         else:
-            # Regular video (intro, video, transition, outro)
-            inputs.extend(['-i', path])
-
-            # Scale and pad video
+            # Regular video - scale and pad
             filter_complex.append(
-                f"[{i}:v]scale={target_width}:{target_height}:"
+                f"[{item_input_idx}:v]scale={target_width}:{target_height}:"
                 f"force_original_aspect_ratio=decrease,"
-                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2[v{i}_scaled]"
+                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:black[v{i}_scaled]"
             )
 
             video_stream = f"[v{i}_scaled]"
@@ -439,22 +301,31 @@ def build_unified_compilation_command(
         # Add logo overlay for videos (not intro, outro, transition, image)
         if item_type == 'video' and item.get('logo_path'):
             logo_path = item['logo_path']
-            inputs.extend(['-i', logo_path])
-            logo_index = len(inputs) // 2 - 1  # Calculate actual input index
+            cmd.extend(['-i', logo_path])
+            logo_input_idx = input_index
+            input_index += 1
 
             filter_complex.append(
-                f"{video_stream}[{logo_index}:v]overlay=W-w-10:10[v{i}_logo]"
+                f"{video_stream}[{logo_input_idx}:v]overlay=W-w-10:10[v{i}_logo]"
             )
             video_stream = f"[v{i}_logo]"
 
-        # Add text animation for videos
-        if item_type == 'video' and item.get('text_animation_words'):
-            words = item['text_animation_words']
-            text_filter = build_text_animation_filter(video_stream, words, i)
-            filter_complex.append(text_filter)
+        # Add text animation for videos using ASS subtitles
+        if item_type == 'video' and item.get('text_animation_text'):
+            text = item['text_animation_text']
+            video_duration = item.get('duration', 0)
+
+            # Generate ASS file path
+            ass_file = f"temp/{job_id}/text_{item['position']}.ass"
+
+            # Note: ASS file should be generated before calling this function
+            # Using subtitles filter for ASS overlay
+            filter_complex.append(
+                f"{video_stream}subtitles={ass_file}:force_style='Alignment=9,MarginR=40,MarginV=40'[v{i}_text]"
+            )
             video_stream = f"[v{i}_text]"
 
-        # Rename final video stream
+        # Finalize video stream
         filter_complex.append(f"{video_stream}null[v{i}]")
 
         # Handle audio stream
@@ -463,7 +334,7 @@ def build_unified_compilation_command(
             pass
         else:
             # Use original audio
-            filter_complex.append(f"[{i}:a]anull[a{i}]")
+            filter_complex.append(f"[{item_input_idx}:a]anull[a{i}]")
 
     # Concatenate all segments
     video_inputs = ''.join([f"[v{i}]" for i in range(len(job_items))])
@@ -505,33 +376,85 @@ def build_unified_compilation_command(
     return cmd
 
 
-def build_text_animation_filter(input_stream: str, words: List[str], item_index: int) -> str:
+def generate_ass_subtitle_file(
+    text: str,
+    video_duration: float,
+    output_path: str,
+    letter_delay: float = 0.1,
+    cycle_duration: float = 20.0,
+    visible_duration: float = 10.0
+) -> str:
     """
-    Build drawtext filter for word-by-word text animation.
+    Generate ASS subtitle file for letter-by-letter text animation.
 
     Args:
-        input_stream: Input video stream label (e.g., "[v0_logo]")
-        words: List of words to animate
-        item_index: Index of the item (for output labeling)
+        text: The text to animate
+        video_duration: Duration of the video in seconds
+        output_path: Path to save the .ass file
+        letter_delay: Seconds between each letter appearing (default: 0.1)
+        cycle_duration: Seconds between animation cycles (default: 20)
+        visible_duration: How long full text stays visible (default: 10)
 
     Returns:
-        FFmpeg drawtext filter string
+        Path to the generated ASS file
     """
-    # Simple text animation - show all words at once for now
-    # TODO: Implement word-by-word reveal based on timing
-    text = ' '.join(words)
+    # ASS subtitle header
+    ass_content = f"""[Script Info]
+Title: Animated Text
+ScriptType: v4.00+
+WrapStyle: 0
+PlayResX: 1920
+PlayResY: 1080
 
-    return (
-        f"{input_stream}drawtext="
-        f"fontfile=/Windows/Fonts/arial.ttf:"
-        f"text='{text}':"
-        f"fontsize=50:"
-        f"fontcolor=yellow:"
-        f"x=(w-text_w)/2:"
-        f"y=h-100:"
-        f"borderw=2:"
-        f"bordercolor=black[v{item_index}_text]"
-    )
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: Default,Impact,50,&H00FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,3,9,40,40,40,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+"""
+
+    # Calculate number of cycles needed
+    num_cycles = int(video_duration / cycle_duration) + 1
+
+    def format_time(seconds):
+        """Convert seconds to ASS time format (H:MM:SS.CS)"""
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        s = seconds % 60
+        return f"{h}:{m:02d}:{s:05.2f}"
+
+    # Generate animated text for each cycle
+    for cycle in range(num_cycles):
+        cycle_start = cycle * cycle_duration
+
+        # Letter-by-letter animation
+        for i in range(1, len(text) + 1):
+            substring = text[:i]
+            start_time = cycle_start + (i - 1) * letter_delay
+
+            # Last letter stays until visible_duration ends
+            if i == len(text):
+                end_time = cycle_start + visible_duration
+            else:
+                end_time = cycle_start + i * letter_delay
+
+            # Stop if we exceed video duration
+            if start_time >= video_duration:
+                break
+
+            start_str = format_time(start_time)
+            end_str = format_time(min(end_time, video_duration))
+
+            # Add fade effect for smooth appearance
+            ass_content += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{{\\fad(150,0)}}{substring}\\N\n"
+
+    # Write ASS file
+    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write(ass_content)
+
+    return output_path
 ```
 
 ---
@@ -547,7 +470,7 @@ from services.supabase import get_supabase_client
 from services.bigquery import get_video_path_by_id, get_asset_path, insert_compilation_result
 from services.storage import copy_file_to_temp, copy_file_to_output, cleanup_temp_dir, normalize_path_for_server
 from services.logger import setup_job_logger
-from workers.ffmpeg_builder import build_standard_compilation_command, build_4k_compilation_command
+from workers.ffmpeg_builder import build_unified_compilation_command, generate_ass_subtitle_file
 from workers.progress_parser import run_ffmpeg_with_progress
 from utils.video_utils import get_video_duration
 from datetime import datetime
@@ -610,70 +533,82 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             'queue_name': task.request.delivery_info.get('routing_key', 'unknown')
         }).eq('job_id', job_id).execute()
 
-        # Get job videos
-        videos_result = supabase.table("job_videos").select("*").eq("job_id", job_id).order("position").execute()
-        videos = videos_result.data
+        # Get job items (unified sequence: intro, videos, transitions, outro, images)
+        items_result = supabase.table("job_items").select("*").eq("job_id", job_id).order("position").execute()
+        items = items_result.data
 
-        if not videos:
-            raise Exception("No videos found for job")
+        if not items:
+            raise Exception("No items found for job")
 
-        logger.info(f"Processing {len(videos)} videos")
+        logger.info(f"Processing {len(items)} items in sequence")
 
-        # Step 1: Resolve video paths and copy to temp
+        # Step 1: Copy files to temp and prepare items
         logger.info("Step 1: Copying files from SMB to temp")
-        local_video_paths = []
+        processed_items = []
 
-        for i, video in enumerate(videos):
-            # Get path (either from video_id or direct path)
-            if video.get('video_id'):
-                video_path = get_video_path_by_id(video['video_id'])
-                if not video_path:
-                    raise Exception(f"Video ID {video['video_id']} not found")
+        for i, item in enumerate(items):
+            item_type = item['item_type']
+            position = item['position']
+
+            logger.info(f"  [{i+1}/{len(items)}] Processing {item_type} at position {position}")
+
+            # Get source path (either from video_id or direct path)
+            if item.get('video_id'):
+                source_path = get_video_path_by_id(item['video_id'])
+                if not source_path:
+                    raise Exception(f"Video ID {item['video_id']} not found")
             else:
-                video_path = video.get('video_path')
+                source_path = item.get('path')
 
-            if not video_path:
-                raise Exception(f"No path for video at position {video['position']}")
+            if not source_path:
+                raise Exception(f"No path for {item_type} at position {position}")
 
-            # Copy to temp
-            normalized_path = normalize_path_for_server(video_path)
-            filename = f"video_{video['position']}_{Path(normalized_path).name}"
+            # Copy file to temp
+            normalized_path = normalize_path_for_server(source_path)
+            file_ext = Path(normalized_path).suffix
+            filename = f"{item_type}_{position}{file_ext}"
             local_path = copy_file_to_temp(normalized_path, job_id, filename)
-            local_video_paths.append(local_path)
 
-            logger.info(f"  [{i+1}/{len(videos)}] Copied {Path(normalized_path).name}")
+            # Get video duration for this item
+            if item_type == 'image':
+                item_duration = item.get('duration', 5)
+            else:
+                item_duration = get_video_duration(local_path)
 
-        # Get asset paths if needed
-        logo_path = None
-        intro_path = None
-        end_path = None
+            # Copy logo if this video has one
+            local_logo_path = None
+            if item_type == 'video' and item.get('logo_path'):
+                logo_source = normalize_path_for_server(item['logo_path'])
+                logo_filename = f"logo_{position}.png"
+                local_logo_path = copy_file_to_temp(logo_source, job_id, logo_filename)
+                logger.info(f"    → Logo copied for position {position}")
 
-        if job.get('has_logo'):
-            logo_path = get_asset_path("logo", job['channel_name'])
-            if logo_path:
-                logo_path = copy_file_to_temp(normalize_path_for_server(logo_path), job_id, "logo.png")
-                logger.info(f"  Logo copied")
+            # Generate ASS subtitle file if text animation is enabled
+            if item_type == 'video' and item.get('text_animation_text'):
+                text = item['text_animation_text']
+                ass_path = str(Path("temp") / job_id / f"text_{position}.ass")
+                generate_ass_subtitle_file(
+                    text=text,
+                    video_duration=item_duration,
+                    output_path=ass_path
+                )
+                logger.info(f"    → Text animation ASS file generated for position {position}")
 
-        if job.get('has_intro'):
-            intro_path = get_asset_path("intro", job['channel_name'])
-            if intro_path:
-                intro_path = copy_file_to_temp(normalize_path_for_server(intro_path), job_id, "intro.mp4")
-                logger.info(f"  Intro copied")
+            # Build processed item dict for FFmpeg builder
+            processed_items.append({
+                'item_type': item_type,
+                'path': local_path,
+                'position': position,
+                'duration': item_duration,
+                'logo_path': local_logo_path,
+                'text_animation_text': item.get('text_animation_text')
+            })
 
-        if job.get('has_end_packaging'):
-            end_path = get_asset_path("end_packaging", job['channel_name'])
-            if end_path:
-                end_path = copy_file_to_temp(normalize_path_for_server(end_path), job_id, "end.mp4")
-                logger.info(f"  End packaging copied")
+            logger.info(f"    ✓ Copied {Path(normalized_path).name}")
 
         # Step 2: Calculate total duration
         logger.info("Step 2: Calculating total duration")
-        total_duration = sum([get_video_duration(p) for p in local_video_paths])
-        if intro_path:
-            total_duration += get_video_duration(intro_path)
-        if end_path:
-            total_duration += get_video_duration(end_path)
-
+        total_duration = sum([item['duration'] for item in processed_items])
         logger.info(f"  Total duration: {total_duration:.2f}s ({total_duration/60:.2f} min)")
 
         # Step 3: Build FFmpeg command
@@ -681,22 +616,12 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         output_filename = f"{job['channel_name']}_{job_id}.mp4"
         output_path = str(Path("temp") / job_id / output_filename)
 
-        if job.get('enable_4k'):
-            cmd = build_4k_compilation_command(
-                local_video_paths,
-                output_path,
-                logo_path=logo_path,
-                stretch_to_4k=True
-            )
-        else:
-            cmd = build_standard_compilation_command(
-                local_video_paths,
-                output_path,
-                logo_path=logo_path,
-                intro_path=intro_path,
-                end_packaging_path=end_path,
-                enable_4k=False
-            )
+        cmd = build_unified_compilation_command(
+            job_items=processed_items,
+            output_path=output_path,
+            job_id=job_id,
+            enable_4k=job.get('enable_4k', False)
+        )
 
         # Step 4: Run FFmpeg
         logger.info("Step 4: Processing video with FFmpeg")
@@ -722,17 +647,31 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             'completed_at': datetime.utcnow().isoformat()
         }).eq('job_id', job_id).execute()
 
+        # Count actual video items (not intro, outro, transitions, images)
+        video_count = len([item for item in items if item['item_type'] == 'video'])
+
+        # Track features used
+        features_used = []
+        if any(item.get('logo_path') for item in items):
+            features_used.append('logo_overlay')
+        if any(item.get('text_animation_text') for item in items):
+            features_used.append('text_animation')
+        if any(item['item_type'] == 'image' for item in items):
+            features_used.append('image_slides')
+        if job.get('enable_4k'):
+            features_used.append('4k_output')
+
         # Insert to BigQuery
         insert_compilation_result({
             "job_id": job_id,
             "username": username,
             "channel_name": job['channel_name'],
             "timestamp": datetime.utcnow().isoformat(),
-            "video_count": len(videos),
+            "video_count": video_count,
             "total_duration": total_duration,
             "output_path": final_output_path,
             "worker_id": task.request.hostname,
-            "features_used": [],  # TODO: Track features
+            "features_used": features_used,
             "processing_time": processing_time,
             "status": "completed"
         })
@@ -784,19 +723,32 @@ from workers.tasks import process_standard_compilation, process_gpu_compilation,
 
 # In submit_job function, after creating job in Supabase, add:
 
-# Determine which queue to use
-if job.enable_4k:
+# Determine which queue to use based on job features
+has_text_animation = any(
+    item.get('text_animation_text')
+    for item in request.items
+    if item.item_type == 'video'
+)
+video_count = len([item for item in request.items if item.item_type == 'video'])
+
+if request.enable_4k:
+    # 4K jobs go to PC1 (4k_queue)
     task = process_4k_compilation.delay(str(job_id))
-elif job.text_animation_enabled or len(job.videos) > 50:
+    queue_name = "4k_queue"
+elif has_text_animation or video_count > 50:
+    # GPU-intensive jobs go to PC1 (gpu_queue)
     task = process_gpu_compilation.delay(str(job_id))
+    queue_name = "gpu_queue"
 else:
+    # Standard jobs distributed across all workers (default_queue)
     task = process_standard_compilation.delay(str(job_id))
+    queue_name = "default_queue"
 
 # Update response with task ID
 return JobSubmitResponse(
     job_id=job_id,
     status="queued",
-    message=f"Job submitted successfully to {task.queue}"
+    message=f"Job submitted successfully to {queue_name}"
 )
 ```
 
@@ -826,17 +778,59 @@ celery -A workers.celery_app worker -Q default_queue --concurrency=1 --loglevel=
 
 ## Checklist
 
-- [ ] Celery app configured
-- [ ] Job logger implemented
-- [ ] FFmpeg progress parser implemented
-- [ ] FFmpeg command builder implemented
-- [ ] Celery tasks implemented
-- [ ] Job queuing integrated in API
+- [ ] Celery app configured (`workers/celery_app.py`)
+- [ ] Job logger implemented (`services/logger.py`)
+- [ ] FFmpeg progress parser implemented (`workers/progress_parser.py`)
+- [ ] FFmpeg command builder implemented (`workers/ffmpeg_builder.py`)
+  - [ ] Unified compilation command function
+  - [ ] ASS subtitle generation function
+- [ ] Celery tasks implemented (`workers/tasks.py`)
+  - [ ] Uses `job_items` table (not job_videos)
+  - [ ] Generates ASS files for text animation
+  - [ ] Copies per-video logos
+  - [ ] Tracks features used
+- [ ] Job queuing integrated in API (`api/routes/jobs.py`)
+  - [ ] Checks for text animation in items
+  - [ ] Routes to correct queue (4k_queue, gpu_queue, default_queue)
 - [ ] Redis running
-- [ ] Workers start successfully
+- [ ] Workers start successfully on all PCs
 - [ ] Test job submission and processing
-- [ ] Logs created correctly
+- [ ] Logs created correctly (INFO and ERROR levels)
 - [ ] Progress updates in Supabase
+- [ ] ASS files generated in temp directory
+- [ ] ASS files cleaned up after job completion
+
+---
+
+## Key Implementation Notes
+
+### **Changes from Initial Design:**
+
+1. **Uses `job_items` table** instead of `job_videos`
+   - Supports intro, video, transition, outro, image types
+   - Each item can have different logo and text animation
+
+2. **Per-video logos**
+   - Each video item can have its own `logo_path`
+   - Logos only applied to `item_type == 'video'` (not intro/outro/transitions/images)
+   - Logo overlaid at top-right corner (W-w-10:10)
+
+3. **Text animation via ASS subtitles**
+   - Generates `.ass` files dynamically for each video with text
+   - Letter-by-letter animation with cycling
+   - Fixed timing: letter_delay=0.1s, cycle=20s, visible=10s
+   - Uses Impact font
+   - Files stored in `temp/{job_id}/text_{position}.ass`
+
+4. **Mixed resolution handling**
+   - Videos/images can be any resolution (4K, Full HD, HD, etc.)
+   - All scaled to target resolution (1920x1080 or 3840x2160)
+   - Black padding maintains 16:9 aspect ratio
+   - Uses `force_original_aspect_ratio=decrease` + `pad`
+
+5. **Feature tracking**
+   - Tracks: logo_overlay, text_animation, image_slides, 4k_output
+   - Stored in BigQuery for analytics
 
 ---
 
