@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 # Cache for channels with TTL
 _channels_cache = {"data": None, "timestamp": 0}
-CACHE_TTL = 300  # 5 minutes
+CACHE_TTL = 86400  # 24 hours (channels rarely change)
 
 @lru_cache()
 def get_bigquery_client():
@@ -151,7 +151,8 @@ def get_asset_path(asset_type: str, channel_name: str) -> Optional[str]:
 def get_all_channels() -> List[str]:
     """
     Get list of all channel names from BigQuery.
-    Cached for 5 minutes to reduce BigQuery queries.
+    Cached for 24 hours to reduce BigQuery queries.
+    Channels rarely change, admin can manually clear cache if needed.
     """
     global _channels_cache
 
@@ -883,9 +884,9 @@ from celery import Celery
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Initialize Celery client for worker stats
-celery_app = Celery('workers')
-celery_app.config_from_object('workers.celery_config')
+# Initialize Celery client for worker stats (will be configured in Task 5)
+# For now, create basic Celery app for inspection
+celery_app = Celery('workers', broker='redis://redis:6379/0')
 
 # Request/Response Models
 class VerifyJobRequest(BaseModel):
@@ -1443,6 +1444,30 @@ async def get_queue_stats(user_id: str):
 
 **File: `backend/api/routes/uploads.py`**
 
+**IMPORTANT: Docker Volume Mapping Required**
+
+Add to `docker-compose.yml` under backend service volumes:
+```yaml
+volumes:
+  - ./backend:/app
+  - /app/venv
+  - ./logs:/app/logs
+  - ./temp:/app/temp
+  - ./uploads:/app/uploads  # ← Add this for persistent image uploads
+```
+
+**And for worker nodes (`docker-compose.worker.yml`):**
+```yaml
+volumes:
+  - ./backend:/app
+  - /app/venv
+  - ./logs:/app/logs
+  - ./temp:/app/temp
+  - ./uploads:/app/uploads  # ← Add this so workers can access uploaded images
+```
+
+---
+
 ```python
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pathlib import Path
@@ -1570,7 +1595,7 @@ async def clear_cache():
     Manually clear the channels cache.
 
     Use this endpoint after adding a new channel to BigQuery.
-    Otherwise, new channel will appear after 5 minutes (cache TTL).
+    Otherwise, new channel will appear after 24 hours (cache TTL).
 
     Returns:
         dict: Success message
@@ -1625,94 +1650,257 @@ curl http://localhost:8000/api/admin/cache-status
 ## 7. Test the Endpoints
 
 ### 1. Get all channels:
-```bash
-curl http://localhost:8000/api/channels
+**Note:** This would typically be called from frontend, not curl. For testing purposes, you can call `get_all_channels()` directly in Python or add a temporary test endpoint.
+
+```python
+# Test in Python
+from services.bigquery import get_all_channels
+channels = get_all_channels()
+print(f"Channels: {channels}")
 ```
 
-### 2. Validate videos:
+**Or add temporary test endpoint in admin.py:**
+```python
+@router.get("/channels")
+async def get_channels_list():
+    """Get list of all channels (for testing)"""
+    from services.bigquery import get_all_channels
+    channels = get_all_channels()
+    return {"channels": channels, "count": len(channels)}
+```
+
+**Then test with:**
 ```bash
-curl -X POST http://localhost:8000/api/jobs/validate \
+curl http://localhost:8000/api/admin/channels
+```
+
+---
+
+### 2. Verify job (bulk verification):
+```bash
+curl -X POST "http://localhost:8000/api/jobs/verify?user_id=<user-uuid>" \
   -H "Content-Type: application/json" \
   -d '{
-    "videos": [
-      {"video_id": "TJU5wYdTG4c", "position": 1}
-    ],
-    "channel_name": "YourChannel",
-    "check_logo": true
+    "channel_name": "YBH Official",
+    "video_ids": ["TJU5wYdTG4c", "ABC123xyz", "DEF456abc"],
+    "manual_paths": []
   }'
 ```
 
-### 3. Submit job:
+**Expected response:**
+```json
+{
+  "default_logo_path": "\\\\192.168.1.6\\Share3\\Assets\\logo_ybh.png",
+  "total_duration": 1850.5,
+  "items": [
+    {
+      "position": 1,
+      "item_type": "intro",
+      "path": "\\\\192.168.1.6\\Share3\\Assets\\intro_ybh.mp4",
+      "path_available": true,
+      "duration": 10.5,
+      "resolution": "1920x1080",
+      "is_4k": false
+    },
+    {
+      "position": 2,
+      "item_type": "video",
+      "video_id": "TJU5wYdTG4c",
+      "title": "Amazing Video Title",
+      "path": "\\\\192.168.1.6\\Share3\\YBH\\video_001.mp4",
+      "path_available": true,
+      "logo_path": "\\\\192.168.1.6\\Share3\\Assets\\logo_ybh.png",
+      "duration": 120.5,
+      "resolution": "1920x1080",
+      "is_4k": false
+    }
+  ]
+}
+```
+
+**Log created at:** `logs/2025-11-20/Uzasch/verify/14-30-45-123.log`
+
+---
+
+### 3. Verify single manual path:
 ```bash
-curl -X POST http://localhost:8000/api/jobs/submit?user_id=<user-uuid> \
+curl -X POST "http://localhost:8000/api/jobs/verify?user_id=<user-uuid>" \
   -H "Content-Type: application/json" \
   -d '{
-    "channel_name": "TestChannel",
-    "videos": [
-      {"video_id": "video1", "position": 1},
-      {"video_id": "video2", "position": 2}
-    ],
-    "has_logo": true
+    "channel_name": "YBH Official",
+    "video_ids": [],
+    "manual_paths": ["V:\\Production\\Kids\\transition.mp4"]
   }'
+```
+
+---
+
+### 4. Submit job:
+```bash
+curl -X POST "http://localhost:8000/api/jobs/submit" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "<user-uuid>",
+    "channel_name": "YBH Official",
+    "enable_4k": false,
+    "items": [
+      {
+        "position": 1,
+        "item_type": "intro",
+        "path": "\\\\192.168.1.6\\Share3\\Assets\\intro_ybh.mp4",
+        "path_available": true,
+        "duration": 10.5
+      },
+      {
+        "position": 2,
+        "item_type": "video",
+        "video_id": "TJU5wYdTG4c",
+        "title": "Amazing Video",
+        "path": "\\\\192.168.1.6\\Share3\\YBH\\video_001.mp4",
+        "path_available": true,
+        "logo_path": "\\\\192.168.1.6\\Share3\\Assets\\logo_ybh.png",
+        "duration": 120.5
+      }
+    ]
+  }'
+```
+
+**Expected response:**
+```json
+{
+  "job_id": "abc-123-def-456",
+  "status": "queued"
+}
+```
+
+---
+
+### 5. Get job status:
+```bash
+curl http://localhost:8000/api/jobs/abc-123-def-456
+```
+
+---
+
+### 6. Get queue stats:
+```bash
+curl "http://localhost:8000/api/jobs/queue/stats?user_id=<user-uuid>"
+```
+
+**Expected response:**
+```json
+{
+  "total_in_queue": 5,
+  "active_workers": 3,
+  "user_jobs": [
+    {
+      "job_id": "abc-123",
+      "channel_name": "YBH Official",
+      "queue_position": 2,
+      "is_processing": true,
+      "status": "processing",
+      "waiting_count": 0
+    }
+  ],
+  "available_slots": 0
+}
+```
+
+---
+
+### 7. Upload image:
+```bash
+curl -X POST http://localhost:8000/api/uploads/image \
+  -F "file=@/path/to/image.png"
+```
+
+---
+
+### 8. Admin - Clear cache:
+```bash
+curl -X POST http://localhost:8000/api/admin/clear-channels-cache
+```
+
+---
+
+### 9. Admin - Check cache status:
+```bash
+curl http://localhost:8000/api/admin/cache-status
+```
+
+**Expected response:**
+```json
+{
+  "cached": true,
+  "channels_count": 15,
+  "cache_age_seconds": 7200,
+  "cache_remaining_seconds": 79200,
+  "is_expired": false
+}
 ```
 
 ---
 
 ## Checklist
 
-### BigQuery Service
+### Section 1: BigQuery Service
 - [ ] `get_bigquery_client()` - cached client
 - [ ] `get_videos_info_by_ids()` - **batch query** for videos (path + title)
 - [ ] `get_asset_path()` - fetch logo/intro/outro
-- [ ] `get_all_channels()` - with **5-minute TTL cache**
+- [ ] `get_all_channels()` - with **24-hour TTL cache**
+- [ ] `get_production_path()` - fetch production path per channel
 - [ ] `clear_channels_cache()` - manual cache clearing
 - [ ] `insert_compilation_result()` - analytics insert
 - [ ] All functions use **proper logging** (not print statements)
 
-### Storage Service
-- [ ] SMB path normalization functions implemented
-- [ ] Path existence checking works
-- [ ] File copy operations work (temp and output)
+### Section 2: Storage Service
+- [ ] `normalize_paths()` - multi-format path normalization (UNC, drive letters, SMB URLs, macOS)
+- [ ] `check_paths_exist()` - **parallel** path existence checking (10 workers)
+- [ ] `copy_file_sequential()` - robocopy with shutil fallback
+- [ ] Drive letter mappings configured (Share→S:, Share2→T:, etc.)
 
-### Video Utilities
-- [ ] `get_video_duration()` using ffprobe
-- [ ] `get_video_resolution()` using ffprobe
-- [ ] `is_4k_video()` detection works
+### Section 3: Video Utilities
+- [ ] `get_video_info()` - combined duration + resolution in single ffprobe call
+- [ ] `get_videos_info_batch()` - **parallel** batch processing (5 workers)
+- [ ] Returns dict with duration, width, height, is_4k
 
-### Validation Loggers
-- [ ] `setup_validation_logger()` for Stage 1 verification
-- [ ] `setup_final_validation_logger()` for Stage 2 verification
-- [ ] Logs created in correct structure:
-  - [ ] `logs/{date}/{username}/verify/{timestamp}.log`
-  - [ ] `logs/{date}/{username}/final-verify/{timestamp}.log`
+### Section 4: Validation Logger
+- [ ] `setup_validation_logger()` - single logger for all /verify calls
+- [ ] Logs both INFO and ERROR levels
+- [ ] File-only logging (no console output)
+- [ ] Logs created in correct structure: `logs/{date}/{username}/verify/{timestamp}.log`
 
-### Job Routes
-- [ ] `/verify` endpoint - uses **batch query** instead of loop
-  - [ ] Fetches all videos in 1 BigQuery call
+### Section 5: Job Routes
+- [ ] `/verify` endpoint - smart verification (bulk + single item)
+  - [ ] Fetches all videos in 1 BigQuery call (batch)
+  - [ ] Parallel path existence checking
+  - [ ] Parallel ffprobe for video info
   - [ ] Logs to verify folder
-- [ ] `/verify-paths` endpoint - final verification
-  - [ ] Logs to final-verify folder
-- [ ] `/submit` endpoint - job submission
-- [ ] `/{job_id}` endpoint - job status
-- [ ] `/queue/stats` endpoint - queue positions
-- [ ] `/{job_id}/move-to-production` endpoint
+- [ ] `/submit` endpoint - job submission (no verification, already done)
+- [ ] `/{job_id}` endpoint - job status lookup
+- [ ] `/queue/stats` endpoint - dynamic worker count from Celery
+- [ ] `/{job_id}/move-to-production` endpoint - uses production path from BigQuery
 
-### Image Upload
-- [ ] Image upload endpoint works
-- [ ] Image delete endpoint works
-- [ ] File validation (size, type) works
+### Section 5 (Subsection): Image Upload Routes
+- [ ] `/uploads/image` - image upload endpoint
+- [ ] `/uploads/image/{filename}` DELETE - image delete endpoint
+- [ ] `/uploads/image/{filename}` GET - image info endpoint
+- [ ] File validation (size: 10MB max, type: jpg/png/gif/bmp/webp)
 
-### Admin Routes
+### Section 6: Admin Routes
 - [ ] `/admin/clear-channels-cache` - clear cache endpoint
-- [ ] `/admin/cache-status` - check cache status
+- [ ] `/admin/cache-status` - check cache status with age/TTL
 
 ### Testing
 - [ ] Tested with real video IDs from BigQuery
-- [ ] Batch query performs faster than individual queries
-- [ ] Cache TTL works correctly
+- [ ] Batch query performs faster than individual queries (30 queries → 1 query)
+- [ ] Parallel path checks faster (1.7s → 0.2s for 17 paths)
+- [ ] Parallel ffprobe faster (15s → 3s for 15 videos)
+- [ ] Cache TTL works correctly (24 hours)
 - [ ] Manual cache clear works
-- [ ] Both validation log types created correctly
+- [ ] Validation logs created correctly
 - [ ] Supabase tables populated correctly
+- [ ] Dynamic worker count from Celery works
 
 ---
 
