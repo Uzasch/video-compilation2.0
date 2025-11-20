@@ -28,6 +28,15 @@ services:
       - /app/venv  # Exclude venv from mounting
       - ./logs:/app/logs
       - ./temp:/app/temp
+      - ./uploads:/app/uploads  # Image uploads storage
+      - smb_share:/mnt/share
+      - smb_share2:/mnt/share2
+      - smb_share3:/mnt/share3
+      - smb_share4:/mnt/share4
+      - smb_new_share_1:/mnt/new_share_1
+      - smb_new_share_2:/mnt/new_share_2
+      - smb_new_share_3:/mnt/new_share_3
+      - smb_new_share_4:/mnt/new_share_4
     env_file:
       - ./backend/.env
     environment:
@@ -52,6 +61,15 @@ services:
       - /app/venv
       - ./logs:/app/logs
       - ./temp:/app/temp
+      - ./uploads:/app/uploads  # Image uploads storage
+      - smb_share:/mnt/share
+      - smb_share2:/mnt/share2
+      - smb_share3:/mnt/share3
+      - smb_share4:/mnt/share4
+      - smb_new_share_1:/mnt/new_share_1
+      - smb_new_share_2:/mnt/new_share_2
+      - smb_new_share_3:/mnt/new_share_3
+      - smb_new_share_4:/mnt/new_share_4
     env_file:
       - ./backend/.env
     environment:
@@ -90,6 +108,63 @@ services:
 
 volumes:
   redis_data:
+
+  # SMB Network Shares with credentials
+  smb_share:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/Share"
+
+  smb_share2:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/Share2"
+
+  smb_share3:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/Share3"
+
+  smb_share4:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/Share4"
+
+  smb_new_share_1:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/New_Share_1"
+
+  smb_new_share_2:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/New_Share_2"
+
+  smb_new_share_3:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/New_Share_3"
+
+  smb_new_share_4:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/New_Share_4"
 
 networks:
   app-network:

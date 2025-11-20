@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 
 from api.config import get_settings
-from api.routes import auth, jobs, queue, history, admin
+from api.routes import auth, jobs, queue, history, admin, uploads
 
 settings = get_settings()
 
@@ -32,6 +32,7 @@ app.include_router(jobs.router, prefix="/api/jobs", tags=["Jobs"])
 app.include_router(queue.router, prefix="/api/queue", tags=["Queue"])
 app.include_router(history.router, prefix="/api/history", tags=["History"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(uploads.router, prefix="/api", tags=["Uploads"])
 
 # Health check
 @app.get("/health")
