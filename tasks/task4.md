@@ -275,17 +275,52 @@ def insert_compilation_result(job_data: Dict):
 
 **File: `backend/services/storage.py`**
 
+**Cross-Platform File Copying:**
+- **Linux/Docker**: rsync (preferred) → cp (fallback) → shutil (final fallback)
+- **Windows**: robocopy (preferred) → shutil (fallback)
+- Auto-detects environment and uses optimal copy method
+- Built-in retry logic and timeout handling
+
 ```python
 import os
 import subprocess
 import shutil
 import logging
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from api.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Check which copy tools are available
+_RSYNC_AVAILABLE = None
+_CP_AVAILABLE = None
+
+def _check_command_available(cmd: str) -> bool:
+    """Check if a command is available in PATH"""
+    try:
+        subprocess.run([cmd, "--version"], capture_output=True, timeout=5)
+        return True
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return False
+
+def is_rsync_available() -> bool:
+    """Check if rsync is available (cached)"""
+    global _RSYNC_AVAILABLE
+    if _RSYNC_AVAILABLE is None:
+        _RSYNC_AVAILABLE = _check_command_available("rsync")
+        logger.info(f"rsync available: {_RSYNC_AVAILABLE}")
+    return _RSYNC_AVAILABLE
+
+def is_cp_available() -> bool:
+    """Check if cp is available (cached)"""
+    global _CP_AVAILABLE
+    if _CP_AVAILABLE is None:
+        _CP_AVAILABLE = _check_command_available("cp")
+        logger.info(f"cp available: {_CP_AVAILABLE}")
+    return _CP_AVAILABLE
 
 # Drive letter mappings for SMB shares
 SHARE_MAPPINGS = {

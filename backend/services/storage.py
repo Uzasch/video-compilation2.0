@@ -2,12 +2,41 @@ import os
 import subprocess
 import shutil
 import logging
+import time
 from pathlib import Path
 from typing import List, Dict, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from api.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Check which copy tools are available
+_RSYNC_AVAILABLE = None
+_CP_AVAILABLE = None
+
+def _check_command_available(cmd: str) -> bool:
+    """Check if a command is available in PATH"""
+    try:
+        subprocess.run([cmd, "--version"], capture_output=True, timeout=5)
+        return True
+    except (subprocess.SubprocessError, FileNotFoundError):
+        return False
+
+def is_rsync_available() -> bool:
+    """Check if rsync is available (cached)"""
+    global _RSYNC_AVAILABLE
+    if _RSYNC_AVAILABLE is None:
+        _RSYNC_AVAILABLE = _check_command_available("rsync")
+        logger.info(f"rsync available: {_RSYNC_AVAILABLE}")
+    return _RSYNC_AVAILABLE
+
+def is_cp_available() -> bool:
+    """Check if cp is available (cached)"""
+    global _CP_AVAILABLE
+    if _CP_AVAILABLE is None:
+        _CP_AVAILABLE = _check_command_available("cp")
+        logger.info(f"cp available: {_CP_AVAILABLE}")
+    return _CP_AVAILABLE
 
 # Drive letter mappings for SMB shares
 SHARE_MAPPINGS = {
@@ -194,18 +223,19 @@ def copy_file_sequential(
     source_path: str,
     dest_dir: str,
     dest_filename: Optional[str] = None,
-    use_robocopy: bool = True
+    use_optimal_method: bool = True
 ) -> Optional[str]:
     """
-    Copy a single file (for progress tracking).
+    Copy a single file with automatic method selection based on OS.
 
-    Uses robocopy by default, falls back to shutil.copy() if robocopy fails.
+    Linux/Docker: rsync (preferred) → cp (fallback) → shutil (final fallback)
+    Windows: robocopy (preferred) → shutil (fallback)
 
     Args:
         source_path: Source file path (any format)
         dest_dir: Destination directory
         dest_filename: Optional destination filename (if None, use original name)
-        use_robocopy: If True, try robocopy first; if False, use shutil directly
+        use_optimal_method: If True, try OS-specific optimal method first; if False, use shutil only
 
     Returns:
         Destination file path if success, None if failed
@@ -236,60 +266,215 @@ def copy_file_sequential(
         logger.error(f"Source file not found: {normalized_source}")
         return None
 
-    # Method 1: Try robocopy first
-    if use_robocopy:
-        try:
-            source_dir = str(source_file_path.parent)
-            source_filename = source_file_path.name
+    if not use_optimal_method:
+        # Skip to shutil directly
+        return _copy_with_shutil(normalized_source, dest_file)
 
-            # Robocopy command
-            cmd = [
-                "robocopy",
-                source_dir,
-                str(dest_path),
-                source_filename,
-                "/R:3",      # Retry 3 times on failure
-                "/W:5",      # Wait 5 seconds between retries
-                "/NP",       # No progress (less verbose)
-                "/NDL",      # No directory list
-                "/NJH",      # No job header
-                "/NJS"       # No job summary
-            ]
+    # ========== LINUX / DOCKER ==========
+    if IS_DOCKER:
+        # Method 1: Try rsync (best for network shares)
+        if is_rsync_available():
+            result = _copy_with_rsync(normalized_source, dest_file)
+            if result:
+                return result
+            logger.warning("rsync failed, trying cp fallback")
 
-            logger.info(f"Copying with robocopy: {normalized_source} → {dest_file}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        # Method 2: Try cp with retry logic
+        if is_cp_available():
+            result = _copy_with_cp(normalized_source, dest_file)
+            if result:
+                return result
+            logger.warning("cp failed, trying shutil fallback")
 
-            # Robocopy exit codes: 0-7 are success, 8+ are errors
-            if result.returncode < 8:
-                # Rename if needed
-                temp_dest = dest_path / source_filename
-                if dest_filename and temp_dest.exists() and temp_dest != dest_file:
-                    temp_dest.rename(dest_file)
+        # Method 3: Final fallback to shutil
+        return _copy_with_shutil(normalized_source, dest_file)
 
-                logger.info(f"✓ Robocopy successful: {dest_file}")
-                return str(dest_file)
-            else:
-                logger.warning(f"Robocopy failed (code {result.returncode}), falling back to shutil")
-                # Fall through to shutil backup
+    # ========== WINDOWS ==========
+    else:
+        # Method 1: Try robocopy
+        result = _copy_with_robocopy(source_file_path, dest_path, dest_file)
+        if result:
+            return result
+        logger.warning("robocopy failed, trying shutil fallback")
 
-        except Exception as e:
-            logger.warning(f"Robocopy error: {e}, falling back to shutil")
-            # Fall through to shutil backup
+        # Method 2: Final fallback to shutil
+        return _copy_with_shutil(normalized_source, dest_file)
 
-    # Method 2: Backup with shutil.copy() (no metadata)
+
+def _copy_with_rsync(source: str, dest: Path) -> Optional[str]:
+    """Copy file using rsync (Linux - best for network shares)"""
     try:
-        logger.info(f"Copying with shutil: {normalized_source} → {dest_file}")
-        shutil.copy(normalized_source, dest_file)  # copy() not copy2() - no metadata
-        logger.info(f"✓ Shutil copy successful: {dest_file}")
-        return str(dest_file)
+        cmd = [
+            "rsync",
+            "-av",              # Archive mode + verbose
+            "--timeout=300",    # I/O timeout (5 minutes)
+            "--contimeout=60",  # Connection timeout (1 minute)
+            source,
+            str(dest)
+        ]
+
+        logger.info(f"Copying with rsync: {source} → {dest}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=360)
+
+        if result.returncode == 0:
+            logger.info(f"✓ rsync successful: {dest}")
+            return str(dest)
+        else:
+            logger.warning(f"rsync failed (code {result.returncode}): {result.stderr}")
+            return None
 
     except Exception as e:
-        logger.error(f"✗ Failed to copy {normalized_source}: {e}", exc_info=True)
+        logger.warning(f"rsync error: {e}")
         return None
+
+
+def _copy_with_cp(source: str, dest: Path) -> Optional[str]:
+    """Copy file using cp with retry logic (Linux fallback)"""
+    for attempt in range(3):
+        try:
+            cmd = ["cp", source, str(dest)]
+
+            logger.info(f"Copying with cp (attempt {attempt + 1}/3): {source} → {dest}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300, check=True)
+
+            logger.info(f"✓ cp successful: {dest}")
+            return str(dest)
+
+        except subprocess.CalledProcessError as e:
+            if attempt < 2:
+                logger.warning(f"cp failed (attempt {attempt + 1}/3), retrying in 5 seconds...")
+                time.sleep(5)
+            else:
+                logger.warning(f"cp failed after 3 attempts: {e.stderr}")
+                return None
+        except Exception as e:
+            logger.warning(f"cp error: {e}")
+            return None
+
+    return None
+
+
+def _copy_with_robocopy(source_file_path: Path, dest_path: Path, dest_file: Path) -> Optional[str]:
+    """Copy file using robocopy (Windows)"""
+    try:
+        source_dir = str(source_file_path.parent)
+        source_filename = source_file_path.name
+
+        # Robocopy command
+        cmd = [
+            "robocopy",
+            source_dir,
+            str(dest_path),
+            source_filename,
+            "/R:3",      # Retry 3 times on failure
+            "/W:5",      # Wait 5 seconds between retries
+            "/NP",       # No progress (less verbose)
+            "/NDL",      # No directory list
+            "/NJH",      # No job header
+            "/NJS"       # No job summary
+        ]
+
+        logger.info(f"Copying with robocopy: {source_file_path} → {dest_file}")
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+
+        # Robocopy exit codes: 0-7 are success, 8+ are errors
+        if result.returncode < 8:
+            # Rename if needed
+            temp_dest = dest_path / source_filename
+            if temp_dest.exists() and temp_dest != dest_file:
+                temp_dest.rename(dest_file)
+
+            logger.info(f"✓ robocopy successful: {dest_file}")
+            return str(dest_file)
+        else:
+            logger.warning(f"robocopy failed (code {result.returncode})")
+            return None
+
+    except Exception as e:
+        logger.warning(f"robocopy error: {e}")
+        return None
+
+
+def _copy_with_shutil(source: str, dest: Path) -> Optional[str]:
+    """Copy file using shutil (cross-platform fallback)"""
+    try:
+        logger.info(f"Copying with shutil: {source} → {dest}")
+        shutil.copy(source, dest)  # copy() not copy2() - no metadata
+        logger.info(f"✓ shutil copy successful: {dest}")
+        return str(dest)
+
+    except Exception as e:
+        logger.error(f"✗ shutil copy failed {source}: {e}", exc_info=True)
+        return None
+
+def normalize_path_for_server(path: str) -> str:
+    """
+    Normalize a single path (wrapper for normalize_paths that returns single path).
+
+    Args:
+        path: Path in any format
+
+    Returns:
+        Normalized path (UNC on Windows, Docker mount on Linux)
+    """
+    return normalize_paths([path])[0]
+
+
+def copy_file_to_temp(source_path: str, job_id: str, filename: str) -> str:
+    """
+    Copy a file to the temp directory for a job.
+
+    Args:
+        source_path: Source file path (already normalized)
+        job_id: Job UUID
+        filename: Destination filename
+
+    Returns:
+        Local temp file path
+
+    Raises:
+        Exception: If copy fails
+    """
+    settings = get_settings()
+    dest_dir = Path(settings.temp_dir) / str(job_id)
+
+    result = copy_file_sequential(source_path, str(dest_dir), filename)
+
+    if not result:
+        raise Exception(f"Failed to copy file to temp: {source_path}")
+
+    return result
+
+
+def copy_file_to_output(temp_path: str, filename: str) -> str:
+    """
+    Copy a file from temp to output directory.
+
+    Args:
+        temp_path: Path to file in temp directory
+        filename: Output filename
+
+    Returns:
+        Final output file path
+
+    Raises:
+        Exception: If copy fails
+    """
+    settings = get_settings()
+    output_dir = Path(settings.output_dir)
+
+    result = copy_file_sequential(temp_path, str(output_dir), filename)
+
+    if not result:
+        raise Exception(f"Failed to copy file to output: {temp_path}")
+
+    return result
+
 
 def cleanup_temp_dir(job_id: str):
     """
     Clean up temp directory for a job.
+    Includes video files, logo files, and ASS subtitle files.
 
     Args:
         job_id: Job UUID
