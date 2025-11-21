@@ -1,72 +1,10 @@
-## Smart Verification Strategy
-
-### Stage 1: /verify (Initial Bulk Verification)
-**User action:** Enter video IDs → Click "Verify"
-
-**Backend does:**
-1. Batch query BigQuery for all video IDs (1 query)
-2. Get intro/outro/logo paths from BigQuery
-3. Batch check ALL paths exist (intro, outro, all videos)
-4. Calculate total duration
-5. Build initial sequence
-6. Return to frontend with:
-   - All items with path_available status
-   - Total duration
-   - Default logo
-
-**Frontend does:**
-- Open Sequence Builder
-- Show total duration
-- Allow editing
-
----
-
-### Stage 2: Sequence Builder (Individual Item Verification)
-**User actions:**
-- Add manual video path → Verify immediately
-- Add transition path → Verify immediately
-- Upload image → Save immediately
-- Reorder items → No verification needed
-- Remove items → No verification needed
-- Change logo → Verify immediately
-
-**Backend endpoints:**
-- `POST /verify-single-path` - Verify one path (returns duration + exists)
-- `POST /verify-video-id` - Verify one video ID (returns path + title + duration)
-- `POST /uploads/image` - Upload image (already exists)
-
-**Response:**
-{
-  "path_available": true/false,
-  "duration": 120.5,
-  "resolution": "1920x1080",
-  "is_4k": false
-}
-
----
-
-### Stage 3: /submit (No Verification Needed)
-**User action:** Click "Submit"
-
-**Backend does:**
-1. Take the sequence as-is (all already verified)
-2. Create job record
-3. Queue Celery task
-4. Start processing immediately
-
-**No path verification!** Everything already checked.
-
----
-
-## Benefits:
-✅ Faster initial verification (batch operations)
-✅ Real-time feedback when adding items
-✅ No final verification needed
-✅ Better UX (immediate feedback per item)
-✅ No waiting when submitting
-
----
-
-## Question:
-Should we remove the `/verify-paths` endpoint entirely since we verify as we go?
-Or keep it as a "final check" option?
+1b9AcqPFTz8
+J2htsBo8WgA
+-Vpx09PpcNU
+B9GD1SFd6BM
+6PKp0yVRsY8
+uv11tjZ3avk
+XmS8jjTj3-Q
+hYgcXAAAOdg
+uRYHXRKUDy8
+zvovneG6AFQ
