@@ -1,6 +1,9 @@
 # Use Python 3.13 slim image
 FROM python:3.13-slim
 
+# Enable NVIDIA driver capabilities for video encoding (NVENC)
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
+
 # Set working directory
 WORKDIR /app
 
