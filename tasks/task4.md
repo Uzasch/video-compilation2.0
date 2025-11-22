@@ -474,12 +474,13 @@ def copy_file_sequential(
     source_path: str,
     dest_dir: str,
     dest_filename: Optional[str] = None,
-    use_robocopy: bool = True
+    use_optimal_method: bool = True
 ) -> Optional[str]:
     """
-    Copy a single file (for progress tracking).
+    Copy a single file with automatic method selection based on OS.
 
-    Uses robocopy by default, falls back to shutil.copy() if robocopy fails.
+    Linux/Docker: rsync (preferred) → cp (fallback) → shutil (final fallback)
+    Windows: robocopy (preferred) → shutil (fallback)
 
     Args:
         source_path: Source file path (any format)

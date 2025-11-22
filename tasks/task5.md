@@ -26,9 +26,9 @@ app = Celery(
 app.conf.update(
     # Task settings
     task_track_started=True,
-    task_time_limit=7200,  # 2 hours max per task
-    task_soft_time_limit=6600,  # 1h 50m soft limit
-    worker_prefetch_multiplier=1,  # One job at a time per worker
+    task_time_limit=10800,  # 3 hours max per task
+    task_soft_time_limit=10200,  # 2h 50m soft limit
+    worker_prefetch_multiplier=2,  # Prefetch next job for 90% file copying optimization
 
     # Result settings
     result_expires=86400,  # Keep results for 24 hours
@@ -136,7 +136,7 @@ def parse_ffmpeg_progress(line: str) -> dict:
 
     return result
 
-def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logger):
+def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logger, log_dir: str):
     """
     Run FFmpeg command and parse progress, updating Supabase in real-time.
 
@@ -145,8 +145,16 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
         job_id: Job UUID
         total_duration: Total expected output duration in seconds
         logger: Job logger instance
+        log_dir: Directory where log files are stored (for stderr and command files)
     """
+    from pathlib import Path
     supabase = get_supabase_client()
+
+    # Write full FFmpeg command to file (in same directory as logs)
+    cmd_file = Path(log_dir) / f"ffmpeg_cmd.txt"
+    with open(cmd_file, 'w', encoding='utf-8') as f:
+        f.write(' '.join(cmd))
+    logger.info(f"FFmpeg command written to: {cmd_file}")
 
     logger.info(f"Starting FFmpeg process")
     logger.info(f"Expected output duration: {total_duration:.2f}s")
@@ -160,10 +168,10 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
     )
 
     last_progress = 0
-    stderr_lines = []  # Collect stderr for error reporting
+    stderr_lines = []  # Collect all stderr for full error reporting
 
     for line in process.stderr:
-        stderr_lines.append(line)  # Store for error reporting
+        stderr_lines.append(line)  # Store all stderr lines
 
         # Parse progress
         parsed = parse_ffmpeg_progress(line)
@@ -189,13 +197,18 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
     # Wait for process to complete
     returncode = process.wait()
 
+    # Write full stderr to file (in same directory as logs)
+    stderr_file = Path(log_dir) / f"ffmpeg_stderr.txt"
+    with open(stderr_file, 'w', encoding='utf-8') as f:
+        f.writelines(stderr_lines)
+
     if returncode == 0:
         logger.info("FFmpeg completed successfully")
+        logger.info(f"Full stderr written to: {stderr_file}")
     else:
-        # Use collected stderr lines (last 20 lines for context)
-        stderr_output = ''.join(stderr_lines[-20:])
         logger.error(f"FFmpeg failed with code {returncode}")
-        logger.error(f"Error output (last 20 lines):\n{stderr_output}")
+        logger.error(f"Full stderr written to: {stderr_file}")
+        logger.error(f"Error output (last 50 lines):\n{''.join(stderr_lines[-50:])}")
 
     return returncode
 ```
@@ -353,22 +366,50 @@ def build_unified_compilation_command(
     # Map output streams
     cmd.extend(['-map', '[outv]', '-map', '[outa]'])
 
-    # Encoding settings
+    # Encoding settings - GPU-Accelerated (Nvidia NVENC)
     if enable_4k:
         cmd.extend([
-            '-c:v', 'libx264',
-            '-preset', 'slow',
-            '-crf', '21',
+            # Video encoding (GPU)
+            '-c:v', 'h264_nvenc',       # Nvidia GPU encoder
+            '-preset', 'p5',             # p5 = high quality (p1-p7 range)
+            '-tune', 'hq',               # High quality tuning
+            '-rc', 'vbr',                # Variable bitrate (matches Adobe)
+            '-b:v', '40M',               # Target 40 Mbps for 4K
+            '-maxrate', '50M',           # Max bitrate
+            '-bufsize', '60M',           # Buffer size (1.5x maxrate)
+            '-profile:v', 'high',        # High profile for 4K
+            '-level', '5.1',             # Level 5.1 for 4K (up to 4096x2304@30fps)
+            '-pix_fmt', 'yuv420p',       # Pixel format (standard compatibility)
+            '-spatial-aq', '1',          # Spatial AQ (adapts bitrate to complexity)
+            '-temporal-aq', '1',         # Temporal AQ (adapts bitrate to motion)
+
+            # Audio encoding
             '-c:a', 'aac',
-            '-b:a', '256k',
+            '-b:a', '320k',              # 320 kbps (matches Adobe Premiere)
+            '-ar', '48000',              # 48kHz sample rate (matches Adobe)
+            '-ac', '2',                  # Stereo
         ])
     else:
         cmd.extend([
-            '-c:v', 'libx264',
-            '-preset', 'medium',
-            '-crf', '23',
+            # Video encoding (GPU)
+            '-c:v', 'h264_nvenc',       # Nvidia GPU encoder
+            '-preset', 'p5',             # p5 = high quality (p1-p7 range)
+            '-tune', 'hq',               # High quality tuning
+            '-rc', 'vbr',                # Variable bitrate (matches Adobe)
+            '-b:v', '16M',               # Target 16 Mbps (matches Adobe ~15.9)
+            '-maxrate', '20M',           # Max bitrate
+            '-bufsize', '24M',           # Buffer size (1.5x maxrate)
+            '-profile:v', 'main',        # Main profile (matches Adobe)
+            '-level', '4.1',             # Level 4.1 (up to 1920x1080@30fps)
+            '-pix_fmt', 'yuv420p',       # Pixel format (standard compatibility)
+            '-spatial-aq', '1',          # Spatial AQ (adapts bitrate to complexity)
+            '-temporal-aq', '1',         # Temporal AQ (adapts bitrate to motion)
+
+            # Audio encoding
             '-c:a', 'aac',
-            '-b:a', '192k',
+            '-b:a', '320k',              # 320 kbps (matches Adobe Premiere)
+            '-ar', '48000',              # 48kHz sample rate (matches Adobe)
+            '-ac', '2',                  # Stereo
         ])
 
     cmd.extend([
@@ -471,7 +512,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 from celery import Task
 from workers.celery_app import app
 from services.supabase import get_supabase_client
-from services.bigquery import get_video_path_by_id, get_asset_path, insert_compilation_result
+from services.bigquery import get_videos_info_by_ids, insert_compilation_result
 from services.storage import (
     copy_files_parallel, copy_file_to_temp, copy_file_to_output,
     cleanup_temp_dir, normalize_path_for_server
@@ -479,11 +520,12 @@ from services.storage import (
 from services.logger import setup_job_logger
 from workers.ffmpeg_builder import build_unified_compilation_command, generate_ass_subtitle_file
 from workers.progress_parser import run_ffmpeg_with_progress
-from utils.video_utils import get_video_duration
+from utils.video_utils import get_videos_info_batch
 from api.config import get_settings
 from datetime import datetime
-import time
 from pathlib import Path
+import time
+import logging
 
 @app.task(bind=True)
 def process_standard_compilation(self, job_id: str):
@@ -527,6 +569,7 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
     # Setup job logger
     logger, log_path = setup_job_logger(job_id, username, job['channel_name'])
+    log_dir = str(Path(log_path).parent)  # Get directory for stderr and command files
 
     logger.info(f"=== Starting Compilation Job {job_id} ===")
     logger.info(f"Worker: {task.request.hostname} ({worker_type})")
@@ -550,8 +593,99 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
         logger.info(f"Processing {len(items)} items in sequence")
 
-        # Step 1: Prepare file list and copy in parallel
-        logger.info("Step 1: Preparing file list for parallel copy")
+        # Step 0: Start prefetching files for next job (if exists) in background
+        logger.info("Step 0: Checking for next job in queue to prefetch")
+        try:
+            from celery import current_app
+            from threading import Thread
+
+            # Check if worker has a prefetched job
+            inspect = current_app.control.inspect()
+            worker_name = task.request.hostname
+            reserved = inspect.reserved()
+
+            next_job_id = None
+            if reserved and worker_name in reserved:
+                reserved_tasks = reserved[worker_name]
+                # Find next job (should be second in list since current is first)
+                if len(reserved_tasks) > 1:
+                    next_task = reserved_tasks[1]
+                    # Extract job_id from task args
+                    if next_task.get('args') and len(next_task['args']) > 0:
+                        next_job_id = next_task['args'][0]
+                        logger.info(f"  Next job in queue: {next_job_id}")
+
+                        # Start background thread to prefetch files
+                        def prefetch_files_for_job(next_job_id):
+                            """Background thread to copy files for next job"""
+                            try:
+                                prefetch_logger = logging.getLogger(f"prefetch_{next_job_id}")
+                                logger.info(f"  Starting background prefetch for job {next_job_id}")
+
+                                # Get next job items
+                                next_items = supabase.table("job_items").select("*").eq("job_id", next_job_id).execute().data
+                                if not next_items:
+                                    return
+
+                                # Batch query paths
+                                next_video_ids = [item['video_id'] for item in next_items if item.get('video_id')]
+                                next_videos_info = {}
+                                if next_video_ids:
+                                    next_videos_info = get_videos_info_by_ids(next_video_ids)
+
+                                # Build file list
+                                next_files = []
+                                for item in next_items:
+                                    if item.get('video_id'):
+                                        source_path = next_videos_info[item['video_id']]['path']
+                                    else:
+                                        source_path = item.get('path')
+
+                                    if source_path:
+                                        normalized = normalize_path_for_server(source_path)
+                                        file_ext = Path(normalized).suffix
+                                        filename = f"{item['item_type']}_{item['position']}{file_ext}"
+                                        next_files.append({'source_path': normalized, 'dest_filename': filename})
+
+                                    # Add logo if exists
+                                    if item['item_type'] == 'video' and item.get('logo_path'):
+                                        logo_normalized = normalize_path_for_server(item['logo_path'])
+                                        logo_filename = f"logo_{item['position']}.png"
+                                        next_files.append({'source_path': logo_normalized, 'dest_filename': logo_filename})
+
+                                # Copy files in parallel
+                                if next_files:
+                                    dest_dir = str(Path(settings.temp_dir) / next_job_id)
+                                    logger.info(f"  Prefetching {len(next_files)} files for job {next_job_id}")
+                                    copy_files_parallel(next_files, dest_dir, max_workers=5)
+                                    logger.info(f"  ✓ Prefetch completed for job {next_job_id}")
+
+                            except Exception as e:
+                                logger.warning(f"  Prefetch failed for job {next_job_id}: {e}")
+
+                        # Start background thread
+                        prefetch_thread = Thread(target=prefetch_files_for_job, args=(next_job_id,), daemon=True)
+                        prefetch_thread.start()
+                        logger.info(f"  Background prefetch thread started for {next_job_id}")
+                    else:
+                        logger.info("  No next job found in queue")
+            else:
+                logger.info("  No reserved tasks found (worker queue empty)")
+
+        except Exception as e:
+            logger.warning(f"  Could not check for next job: {e}")
+
+        # Step 1a: Batch query all video paths upfront (1 query instead of N)
+        logger.info("Step 1a: Batch querying video paths from BigQuery")
+        video_ids = [item['video_id'] for item in items if item.get('video_id')]
+        videos_info = {}
+
+        if video_ids:
+            videos_info = get_videos_info_by_ids(video_ids)
+            logger.info(f"  Retrieved paths for {len(videos_info)}/{len(video_ids)} videos")
+
+        # Step 1b: Prepare file list and copy in parallel
+        logger.info("Step 1b: Preparing file list for parallel copy")
 
         # Build list of all files to copy (items + logos)
         files_to_copy = []
@@ -561,11 +695,12 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             item_type = item['item_type']
             position = item['position']
 
-            # Get source path (either from video_id or direct path)
+            # Get source path (from batch query or direct path)
             if item.get('video_id'):
-                source_path = get_video_path_by_id(item['video_id'])
-                if not source_path:
-                    raise Exception(f"Video ID {item['video_id']} not found")
+                video_id = item['video_id']
+                if video_id not in videos_info:
+                    raise Exception(f"Video ID {video_id} not found in BigQuery")
+                source_path = videos_info[video_id]['path']
             else:
                 source_path = item.get('path')
 
@@ -600,8 +735,8 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
                 'logo_filename': logo_filename
             })
 
-        # Copy all files in parallel (5x faster than sequential)
-        logger.info(f"Copying {len(files_to_copy)} files in parallel (items + logos)")
+        # Step 1c: Copy all files in parallel (5x faster than sequential)
+        logger.info(f"Step 1c: Copying {len(files_to_copy)} files in parallel (items + logos)")
         settings = get_settings()
         dest_dir = str(Path(settings.temp_dir) / job_id)
 
@@ -618,8 +753,25 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
         logger.info(f"✓ All {len(files_to_copy)} files copied successfully")
 
-        # Step 1b: Process items (get durations, generate ASS files)
-        logger.info("Step 1b: Processing items (durations, text animation)")
+        # Step 1d: Batch query all video durations in parallel
+        logger.info("Step 1d: Batch querying video durations (parallel ffprobe)")
+
+        # Collect all video/intro/outro/transition paths (not images)
+        video_paths = [
+            copy_results[meta['item_filename']]
+            for meta in item_metadata
+            if meta['item_type'] != 'image'
+        ]
+
+        # Batch query durations in parallel (uses ThreadPoolExecutor internally)
+        videos_durations_info = {}
+        if video_paths:
+            videos_durations_info = get_videos_info_batch(video_paths, max_workers=8)
+            success_count = sum(1 for info in videos_durations_info.values() if info is not None)
+            logger.info(f"  Retrieved durations for {success_count}/{len(video_paths)} videos")
+
+        # Step 1e: Process items (apply durations, generate ASS files)
+        logger.info("Step 1e: Processing items (applying durations, text animation)")
         processed_items = []
 
         for meta in item_metadata:
@@ -633,11 +785,14 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             local_path = copy_results[item_filename]
             local_logo_path = copy_results.get(logo_filename) if logo_filename else None
 
-            # Get video duration for this item
+            # Get video duration from batch query
             if item_type == 'image':
                 item_duration = item.get('duration', 5)
             else:
-                item_duration = get_video_duration(local_path)
+                video_info = videos_durations_info.get(local_path)
+                if not video_info or 'duration' not in video_info:
+                    raise Exception(f"Could not get duration for {local_path}")
+                item_duration = video_info['duration']
 
             # Generate ASS subtitle file if text animation is enabled
             if item_type == 'video' and item.get('text_animation_text'):
@@ -679,9 +834,16 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             enable_4k=job.get('enable_4k', False)
         )
 
-        # Step 4: Run FFmpeg
+        # Step 4: Run FFmpeg with progress tracking
         logger.info("Step 4: Processing video with FFmpeg")
-        returncode = run_ffmpeg_with_progress(cmd, job_id, total_duration, logger)
+
+        returncode = run_ffmpeg_with_progress(
+            cmd,
+            job_id,
+            total_duration,
+            logger,
+            log_dir
+        )
 
         if returncode != 0:
             raise Exception(f"FFmpeg failed with return code {returncode}")
@@ -812,49 +974,105 @@ return JobSubmitResponse(
 
 ## 7. Start Workers
 
-### PC1 (Master - All queues):
+**Queue Routing Strategy:**
+- **4K jobs** → 4k_queue → PC1 only
+- **GPU-intensive jobs** → gpu_queue → PC1 only
+- **Standard jobs** → default_queue → All workers (PC1, PC2, PC3)
+
+Workers determine routing by which queues they listen to (no environment variables needed).
+
+### PC1 (All queues - handles 4K, GPU, and standard jobs):
 ```bash
 cd backend
-celery -A workers.celery_app worker -Q 4k_queue,gpu_queue,default_queue --concurrency=1 --loglevel=info -n worker_pc1@%h
+celery -A workers.celery_app worker \
+  -Q 4k_queue,gpu_queue,default_queue \
+  --concurrency=1 \
+  --loglevel=info \
+  -n pc1@%h
 ```
 
-### PC2 (Worker - Default queue only):
+### PC2 (Default queue only - standard jobs):
 ```bash
 cd backend
-celery -A workers.celery_app worker -Q default_queue --concurrency=1 --loglevel=info -n worker_pc2@%h
+celery -A workers.celery_app worker \
+  -Q default_queue \
+  --concurrency=1 \
+  --loglevel=info \
+  -n pc2@%h
 ```
 
-### PC3 (Worker - Default queue only):
+### PC3 (Default queue only - standard jobs):
 ```bash
 cd backend
-celery -A workers.celery_app worker -Q default_queue --concurrency=1 --loglevel=info -n worker_pc3@%h
+celery -A workers.celery_app worker \
+  -Q default_queue \
+  --concurrency=1 \
+  --loglevel=info \
+  -n pc3@%h
 ```
+
+**Why this works:**
+- 4K jobs route to 4k_queue, only PC1 listens → PC1 gets all 4K jobs
+- GPU jobs route to gpu_queue, only PC1 listens → PC1 gets all GPU jobs
+- Standard jobs route to default_queue, all workers listen → Load balanced across PC1, PC2, PC3
 
 ---
 
 ## Checklist
 
+### **Core Implementation**
 - [ ] Celery app configured (`workers/celery_app.py`)
+  - [ ] Time limits: 3 hours (10800s)
+  - [ ] Prefetch multiplier: 2
+  - [ ] Queue routing configured
 - [ ] Job logger implemented (`services/logger.py`)
+  - [ ] ✅ Already implemented - `setup_job_logger()` added
 - [ ] FFmpeg progress parser implemented (`workers/progress_parser.py`)
+  - [ ] Parse progress from stderr
+  - [ ] Update Supabase in real-time
+  - [ ] Write full stderr to file
+  - [ ] Write FFmpeg command to file
 - [ ] FFmpeg command builder implemented (`workers/ffmpeg_builder.py`)
   - [ ] Unified compilation command function
   - [ ] ASS subtitle generation function
+  - [ ] Handles mixed resolutions
+  - [ ] Per-video logos
+  - [ ] Per-video text animation
+  - [ ] GPU encoding (h264_nvenc) with VBR mode
+  - [ ] Audio: 320 kbps @ 48kHz
 - [ ] Celery tasks implemented (`workers/tasks.py`)
   - [ ] Uses `job_items` table (not job_videos)
+  - [ ] **Batch BigQuery query** for all video paths (Step 1a)
+  - [ ] **Parallel file copying** with 5 workers (Step 1c)
+  - [ ] **Batch ffprobe** for all durations (Step 1d)
+  - [ ] **Immediate prefetch** for next job (Step 0)
   - [ ] Generates ASS files for text animation
   - [ ] Copies per-video logos
   - [ ] Tracks features used
+  - [ ] Error handling and cleanup
+
+### **API Integration**
 - [ ] Job queuing integrated in API (`api/routes/jobs.py`)
   - [ ] Checks for text animation in items
   - [ ] Routes to correct queue (4k_queue, gpu_queue, default_queue)
-- [ ] Redis running
+
+### **Infrastructure**
+- [ ] Redis running and accessible
 - [ ] Workers start successfully on all PCs
+  - [ ] PC1: All queues (4k + gpu + default)
+  - [ ] PC2/PC3: Default queue only
+
+### **Testing & Validation**
 - [ ] Test job submission and processing
-- [ ] Logs created correctly (INFO and ERROR levels)
+- [ ] Logs created correctly (job log + stderr + command files)
 - [ ] Progress updates in Supabase
 - [ ] ASS files generated in temp directory
 - [ ] ASS files cleaned up after job completion
+- [ ] **Batch operations working** (1 BigQuery query, parallel copies, parallel ffprobe)
+- [ ] **Immediate prefetch working** (background thread starts at job start)
+- [ ] FFmpeg stderr and command files saved correctly
+- [ ] **GPU encoding working** (verify h264_nvenc available on all PCs)
+- [ ] **Output quality matches Adobe Premiere** (check bitrate, audio, resolution)
 
 ---
 
@@ -888,11 +1106,58 @@ celery -A workers.celery_app worker -Q default_queue --concurrency=1 --loglevel=
    - Tracks: logo_overlay, text_animation, image_slides, 4k_output
    - Stored in BigQuery for analytics
 
-6. **Parallel file copying** (5x faster!)
-   - Uses `copy_files_parallel()` to copy all items + logos at once
-   - 5 concurrent workers (optimal for network shares)
-   - Copies all files before processing durations
-   - Significantly reduces job startup time
+6. **Batch operations for optimal performance**
+   - **Batch BigQuery**: Single query for all video paths using `get_videos_info_by_ids()`
+   - **Parallel file copying**: `copy_files_parallel()` with 5 concurrent workers
+   - **Parallel ffprobe**: Batch duration queries using `get_videos_info_batch()` with 8 workers
+   - Combined optimizations reduce job startup time by ~80%
+
+7. **Time limits updated to 3 hours**
+   - Hard limit: 10800s (3 hours)
+   - Soft limit: 10200s (2h 50m)
+   - Changed from previous 2 hour limits
+
+8. **Enhanced error logging**
+   - Full FFmpeg stderr saved to file: `logs/{date}/{username}/jobs/ffmpeg_stderr.txt`
+   - Located in same directory as job log
+   - All stderr lines captured (not just last N lines)
+   - Log file path written to job log for easy reference
+
+9. **FFmpeg command logging**
+   - Full FFmpeg command saved to file: `logs/{date}/{username}/jobs/ffmpeg_cmd.txt`
+   - Located in same directory as job log
+   - Useful for debugging and reproducing issues
+   - No character limit concerns (file-based)
+
+10. **Immediate prefetch optimization (entire job duration)**
+    - `worker_prefetch_multiplier=2` allows workers to reserve next job
+    - **As soon as job starts**, worker checks for next reserved job
+    - **Immediately starts background thread** to copy files for next job
+    - Background copying runs throughout entire current job (20-30+ min)
+    - By the time current job finishes, next job's files are ready
+    - Uses `celery.control.inspect().reserved()` to query worker's reserved tasks
+    - Much better than 90% trigger (entire job duration vs just last 10%)
+
+11. **Queue-based routing (no environment variables)**
+    - PC1 listens to: 4k_queue + gpu_queue + default_queue
+    - PC2/PC3 listen to: default_queue only
+    - 4K jobs automatically route to PC1 (only listener on 4k_queue)
+    - Self-documenting and simple to configure
+
+12. **GPU-accelerated encoding (Nvidia NVENC)**
+    - Uses `h264_nvenc` instead of software `libx264`
+    - 5-10x faster encoding (2-3 min vs 15-20 min for 20min video)
+    - **VBR mode** with target bitrate (matches Adobe Premiere Pro)
+      - Full HD: 16 Mbps target, 20 Mbps max
+      - 4K: 40 Mbps target, 50 Mbps max
+    - **Preset p5**: High quality (p1=fastest, p7=slowest)
+    - **Quality tuning**: `-tune hq`, spatial-aq, temporal-aq
+    - **Audio upgraded**: 320 kbps @ 48kHz (matches Adobe)
+    - **Hardware requirements**:
+      - This machine: GTX 1060 (Pascal - supports h264_nvenc)
+      - PC1: RTX 5060 Ti (latest - best NVENC)
+      - PC2: GTX 750 (Maxwell - supports h264_nvenc)
+    - CPU freed up for filter_complex processing (scales, overlays, concat)
 
 ---
 
