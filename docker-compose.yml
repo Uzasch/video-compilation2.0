@@ -33,6 +33,7 @@ services:
       - smb_share2:/mnt/share2
       - smb_share3:/mnt/share3
       - smb_share4:/mnt/share4
+      - smb_share5:/mnt/share5
       - smb_new_share_1:/mnt/new_share_1
       - smb_new_share_2:/mnt/new_share_2
       - smb_new_share_3:/mnt/new_share_3
@@ -50,12 +51,22 @@ services:
     restart: unless-stopped
 
   # Celery Worker - Video Processing
+  # All PCs have GPU, so all workers can handle both queues:
+  #   - 4k_queue: Large 4K jobs (>40 videos AND 4K enabled)
+  #   - default_queue: Everything else (standard jobs, small 4K jobs)
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: video-compilation-celery
-    command: celery -A workers.celery_app worker --loglevel=info
+    command: celery -A workers.celery_app worker -Q 4k_queue,default_queue --concurrency=1 --loglevel=info -n pc1@%h
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     volumes:
       - ./backend:/app
       - /app/venv
@@ -66,6 +77,7 @@ services:
       - smb_share2:/mnt/share2
       - smb_share3:/mnt/share3
       - smb_share4:/mnt/share4
+      - smb_share5:/mnt/share5
       - smb_new_share_1:/mnt/new_share_1
       - smb_new_share_2:/mnt/new_share_2
       - smb_new_share_3:/mnt/new_share_3
@@ -138,33 +150,40 @@ volumes:
       o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
       device: "//192.168.1.6/Share4"
 
+  smb_share5:
+    driver: local
+    driver_opts:
+      type: cifs
+      o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
+      device: "//192.168.1.6/Share5"
+
   smb_new_share_1:
     driver: local
     driver_opts:
       type: cifs
       o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
-      device: "//192.168.1.6/New_Share_1"
+      device: "//192.168.1.10/New_Share_1"
 
   smb_new_share_2:
     driver: local
     driver_opts:
       type: cifs
       o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
-      device: "//192.168.1.6/New_Share_2"
+      device: "//192.168.1.10/New_Share_2"
 
   smb_new_share_3:
     driver: local
     driver_opts:
       type: cifs
       o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
-      device: "//192.168.1.6/New_Share_3"
+      device: "//192.168.1.10/New_Share_3"
 
   smb_new_share_4:
     driver: local
     driver_opts:
       type: cifs
       o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
-      device: "//192.168.1.6/New_Share_4"
+      device: "//192.168.1.10/New_Share_4"
 
 networks:
   app-network:
