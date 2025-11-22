@@ -31,6 +31,11 @@ temp/
 *.tmp
 *.temp
 
+# Uploads and test data
+uploads/
+adobe_preset/
+test/
+
 # IDE and Editor files
 .vscode/
 .idea/

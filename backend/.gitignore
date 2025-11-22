@@ -24,5 +24,9 @@ __pycache__/
 temp/
 *.tmp
 
+# Output files
+output/
+
 # Public directory (built frontend)
 public/
+adobe_presets/
