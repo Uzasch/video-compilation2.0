@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Temp
     temp_dir: str = "temp"
 
+    # Output
+    output_dir: str = "output"
+
     # CORS
     cors_origins: Union[str, List[str]] = "http://localhost:3000,http://192.168.1.83:3000"
 
