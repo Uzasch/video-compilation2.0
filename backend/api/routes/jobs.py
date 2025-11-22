@@ -349,10 +349,29 @@ async def submit_job(request: SubmitJobRequest):
 
         supabase.table('job_items').insert(items_data).execute()
 
-        # 4. Queue Celery task (implemented in task5)
-        # from workers.tasks import process_compilation
-        # queue_name = '4k_queue' if request.enable_4k else 'default_queue'
-        # process_compilation.apply_async(args=[job_id], queue=queue_name)
+        # 4. Queue Celery task - determine which queue based on job features
+        from workers.tasks import (
+            process_standard_compilation,
+            process_4k_compilation
+        )
+
+        # Count video items
+        video_count = len([item for item in request.items if item.item_type == 'video'])
+
+        # Route to appropriate queue based on video count and 4K setting
+        # All PCs have GPU, routing based on job size:
+        # - 4K enabled: >20 videos → 4k_queue, ≤20 videos → default_queue
+        # - 4K disabled: >40 videos → 4k_queue, ≤40 videos → default_queue
+        if (request.enable_4k and video_count > 20) or (not request.enable_4k and video_count > 40):
+            # Large jobs go to 4k_queue (load balanced across all workers)
+            task = process_4k_compilation.delay(job_id)
+            queue_name = "4k_queue"
+        else:
+            # Standard/small jobs go to default_queue
+            task = process_standard_compilation.delay(job_id)
+            queue_name = "default_queue"
+
+        logger.info(f"Job {job_id} queued to {queue_name} (task_id: {task.id}, videos: {video_count}, 4k: {request.enable_4k})")
 
         return SubmitJobResponse(
             job_id=job_id,
