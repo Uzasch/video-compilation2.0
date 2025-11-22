@@ -84,6 +84,11 @@ def get_videos_info_by_ids(video_ids: List[str]) -> Dict[str, dict]:
                 "title": title
             }
 
+        logger.info(f"BigQuery returned {len(videos_info)} videos out of {len(video_ids)} requested")
+        if len(videos_info) < len(video_ids):
+            missing = set(video_ids) - set(videos_info.keys())
+            logger.warning(f"Missing video IDs from BigQuery: {missing}")
+
         return videos_info
 
     except Exception as e:
