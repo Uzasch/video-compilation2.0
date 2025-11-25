@@ -1021,58 +1021,58 @@ celery -A workers.celery_app worker \
 ## Checklist
 
 ### **Core Implementation**
-- [ ] Celery app configured (`workers/celery_app.py`)
-  - [ ] Time limits: 3 hours (10800s)
-  - [ ] Prefetch multiplier: 2
-  - [ ] Queue routing configured
-- [ ] Job logger implemented (`services/logger.py`)
-  - [ ] ✅ Already implemented - `setup_job_logger()` added
-- [ ] FFmpeg progress parser implemented (`workers/progress_parser.py`)
-  - [ ] Parse progress from stderr
-  - [ ] Update Supabase in real-time
-  - [ ] Write full stderr to file
-  - [ ] Write FFmpeg command to file
-- [ ] FFmpeg command builder implemented (`workers/ffmpeg_builder.py`)
-  - [ ] Unified compilation command function
-  - [ ] ASS subtitle generation function
-  - [ ] Handles mixed resolutions
-  - [ ] Per-video logos
-  - [ ] Per-video text animation
-  - [ ] GPU encoding (h264_nvenc) with VBR mode
-  - [ ] Audio: 320 kbps @ 48kHz
-- [ ] Celery tasks implemented (`workers/tasks.py`)
-  - [ ] Uses `job_items` table (not job_videos)
-  - [ ] **Batch BigQuery query** for all video paths (Step 1a)
-  - [ ] **Parallel file copying** with 5 workers (Step 1c)
-  - [ ] **Batch ffprobe** for all durations (Step 1d)
-  - [ ] **Immediate prefetch** for next job (Step 0)
-  - [ ] Generates ASS files for text animation
-  - [ ] Copies per-video logos
-  - [ ] Tracks features used
-  - [ ] Error handling and cleanup
+- [x] Celery app configured (`workers/celery_app.py`)
+  - [x] Time limits: 3 hours (10800s)
+  - [x] Prefetch multiplier: 2
+  - [x] Queue routing configured
+- [x] Job logger implemented (`services/logger.py`)
+  - [x] ✅ Already implemented - `setup_job_logger()` added
+- [x] FFmpeg progress parser implemented (`workers/progress_parser.py`)
+  - [x] Parse progress from stderr
+  - [x] Update Supabase in real-time
+  - [x] Write full stderr to file
+  - [x] Write FFmpeg command to file
+- [x] FFmpeg command builder implemented (`workers/ffmpeg_builder.py`)
+  - [x] Unified compilation command function
+  - [x] ASS subtitle generation function
+  - [x] Handles mixed resolutions
+  - [x] Per-video logos
+  - [x] Per-video text animation
+  - [x] GPU encoding (h264_nvenc) with VBR mode
+  - [x] Audio: 320 kbps @ 48kHz
+- [x] Celery tasks implemented (`workers/tasks.py`)
+  - [x] Uses `job_items` table (not job_videos)
+  - [x] **Batch BigQuery query** for all video paths (Step 1a)
+  - [x] **Parallel file copying** with 5 workers (Step 1c)
+  - [x] **Batch ffprobe** for all durations (Step 1d)
+  - [x] **Immediate prefetch** for next job (Step 0)
+  - [x] Generates ASS files for text animation
+  - [x] Copies per-video logos
+  - [x] Tracks features used
+  - [x] Error handling and cleanup
 
 ### **API Integration**
-- [ ] Job queuing integrated in API (`api/routes/jobs.py`)
-  - [ ] Checks for text animation in items
-  - [ ] Routes to correct queue (4k_queue, gpu_queue, default_queue)
+- [x] Job queuing integrated in API (`api/routes/jobs.py`)
+  - [x] Checks for text animation in items
+  - [x] Routes to correct queue (4k_queue, gpu_queue, default_queue)
 
 ### **Infrastructure**
-- [ ] Redis running and accessible
-- [ ] Workers start successfully on all PCs
-  - [ ] PC1: All queues (4k + gpu + default)
-  - [ ] PC2/PC3: Default queue only
+- [x] Redis running and accessible
+- [x] Workers start successfully on all PCs
+  - [x] PC1: All queues (4k + gpu + default) - Tested with GPU encoding
+  - [ ] PC2/PC3: Default queue only - Not yet deployed
 
 ### **Testing & Validation**
-- [ ] Test job submission and processing
-- [ ] Logs created correctly (job log + stderr + command files)
-- [ ] Progress updates in Supabase
-- [ ] ASS files generated in temp directory
-- [ ] ASS files cleaned up after job completion
-- [ ] **Batch operations working** (1 BigQuery query, parallel copies, parallel ffprobe)
-- [ ] **Immediate prefetch working** (background thread starts at job start)
-- [ ] FFmpeg stderr and command files saved correctly
-- [ ] **GPU encoding working** (verify h264_nvenc available on all PCs)
-- [ ] **Output quality matches Adobe Premiere** (check bitrate, audio, resolution)
+- [x] Test job submission and processing - ✅ Successfully completed job
+- [x] Logs created correctly (job log + stderr + command files) - ✅ Verified all 3 files
+- [x] Progress updates in Supabase - ✅ Real-time updates working
+- [ ] ASS files generated in temp directory - Not tested (no text animation in test job)
+- [ ] ASS files cleaned up after job completion - Not tested
+- [x] **Batch operations working** (1 BigQuery query, parallel copies, parallel ffprobe) - ✅ Verified in logs
+- [ ] **Immediate prefetch working** (background thread starts at job start) - Not tested (only one job)
+- [x] FFmpeg stderr and command files saved correctly - ✅ Both files created
+- [x] **GPU encoding working** (verify h264_nvenc available on all PCs) - ✅ Verified h264_nvenc on PC1 (GTX 1060)
+- [ ] **Output quality matches Adobe Premiere** (check bitrate, audio, resolution) - Needs visual inspection
 
 ---
 
