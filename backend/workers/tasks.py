@@ -26,6 +26,14 @@ def process_standard_compilation(self, job_id: str):
     return _process_compilation(self, job_id, worker_type="standard")
 
 @app.task(bind=True)
+def process_gpu_compilation(self, job_id: str):
+    """
+    Process a GPU-accelerated compilation.
+    Runs on gpu_queue for text animation jobs.
+    """
+    return _process_compilation(self, job_id, worker_type="gpu")
+
+@app.task(bind=True)
 def process_4k_compilation(self, job_id: str):
     """
     Process a 4K video compilation with >40 videos.

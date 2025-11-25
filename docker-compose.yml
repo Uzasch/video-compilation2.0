@@ -59,7 +59,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: video-compilation-celery
-    command: celery -A workers.celery_app worker -Q 4k_queue,default_queue --concurrency=1 --loglevel=info -n pc1@%h
+    command: celery -A workers.celery_app worker -Q gpu_queue,4k_queue,default_queue --concurrency=1 --loglevel=info -n pc1@%h
     deploy:
       resources:
         reservations:

@@ -23,10 +23,12 @@ app.conf.update(
     result_expires=86400,  # Keep results for 24 hours
 
     # Routing
-    # All PCs have GPU, so only 2 queues:
-    # - 4k_queue: >40 videos AND 4K enabled
-    # - default_queue: Everything else
+    # Queue routing:
+    # - gpu_queue: Text animation jobs (GPU-intensive subtitle rendering)
+    # - 4k_queue: Large jobs (>40 videos)
+    # - default_queue: Standard jobs
     task_routes={
+        'workers.tasks.process_gpu_compilation': {'queue': 'gpu_queue'},
         'workers.tasks.process_4k_compilation': {'queue': '4k_queue'},
         'workers.tasks.process_standard_compilation': {'queue': 'default_queue'},
     },

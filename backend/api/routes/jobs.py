@@ -37,7 +37,7 @@ class JobItem(BaseModel):
     duration: Optional[float] = None
     resolution: Optional[str] = None
     is_4k: Optional[bool] = None
-    text_animation_words: Optional[List[str]] = []
+    text_animation_text: Optional[str] = None  # Text to animate on video
     error: Optional[str] = None  # Error message if path not available
 
 class VerifyJobResponse(BaseModel):
@@ -344,7 +344,7 @@ async def submit_job(request: SubmitJobRequest):
                 'duration': item.duration,
                 'resolution': item.resolution,
                 'is_4k': item.is_4k,
-                'text_animation_words': item.text_animation_words or []
+                'text_animation_text': item.text_animation_text
             })
 
         supabase.table('job_items').insert(items_data).execute()
@@ -352,17 +352,30 @@ async def submit_job(request: SubmitJobRequest):
         # 4. Queue Celery task - determine which queue based on job features
         from workers.tasks import (
             process_standard_compilation,
-            process_4k_compilation
+            process_4k_compilation,
+            process_gpu_compilation
         )
 
         # Count video items
         video_count = len([item for item in request.items if item.item_type == 'video'])
 
-        # Route to appropriate queue based on video count and 4K setting
-        # All PCs have GPU, routing based on job size:
-        # - 4K enabled: >20 videos → 4k_queue, ≤20 videos → default_queue
-        # - 4K disabled: >40 videos → 4k_queue, ≤40 videos → default_queue
-        if (request.enable_4k and video_count > 20) or (not request.enable_4k and video_count > 40):
+        # Check if text animation is enabled on any video
+        has_text_animation = any(
+            item.text_animation_text
+            for item in request.items
+            if item.item_type == 'video'
+        )
+
+        # Route to appropriate queue:
+        # 1. Text animation enabled → gpu_queue (GPU-intensive subtitle rendering)
+        # 2. 4K enabled and >20 videos → 4k_queue
+        # 3. 4K disabled and >40 videos → 4k_queue
+        # 4. All other jobs → default_queue
+        if has_text_animation:
+            # Text animation jobs need GPU for subtitle rendering
+            task = process_gpu_compilation.delay(job_id)
+            queue_name = "gpu_queue"
+        elif (request.enable_4k and video_count > 20) or (not request.enable_4k and video_count > 40):
             # Large jobs go to 4k_queue (load balanced across all workers)
             task = process_4k_compilation.delay(job_id)
             queue_name = "4k_queue"
@@ -371,7 +384,7 @@ async def submit_job(request: SubmitJobRequest):
             task = process_standard_compilation.delay(job_id)
             queue_name = "default_queue"
 
-        logger.info(f"Job {job_id} queued to {queue_name} (task_id: {task.id}, videos: {video_count}, 4k: {request.enable_4k})")
+        logger.info(f"Job {job_id} queued to {queue_name} (task_id: {task.id}, videos: {video_count}, 4k: {request.enable_4k}, text_animation: {has_text_animation})")
 
         return SubmitJobResponse(
             job_id=job_id,
