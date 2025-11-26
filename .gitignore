@@ -74,6 +74,10 @@ htmlcov/
 *secret*.json
 credentials.json
 
+# Worker setup (contains environment-specific values)
+tasks/worker_setup.md
+docker-compose.worker.yml
+
 # Test files
 .pytest_cache/
 coverage/
