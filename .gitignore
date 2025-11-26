@@ -28,8 +28,12 @@ yarn-error.log*
 
 # Temporary files
 temp/
+temp.txt
 *.tmp
 *.temp
+
+# Conversation logs
+*_conversation.txt
 
 # Uploads and test data
 uploads/
