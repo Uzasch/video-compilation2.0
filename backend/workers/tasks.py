@@ -1,4 +1,4 @@
-from celery import Task
+from celery import Task, current_app
 from workers.celery_app import app
 from services.supabase import get_supabase_client
 from services.bigquery import get_videos_info_by_ids, insert_compilation_result
@@ -13,8 +13,118 @@ from utils.video_utils import get_videos_info_batch
 from api.config import get_settings
 from datetime import datetime
 from pathlib import Path
+from threading import Thread
 import time
 import logging
+
+# Track which jobs have been prefetched to avoid duplicates
+_prefetched_jobs = set()
+
+
+def check_and_prefetch_next_job(worker_name: str, logger, current_job_id: str = None):
+    """
+    Check for next job in queue and start prefetching files in background.
+
+    Args:
+        worker_name: Celery worker hostname
+        logger: Logger instance for output
+        current_job_id: Current job ID (to avoid prefetching self)
+
+    Returns:
+        str: Next job ID if found and prefetch started, None otherwise
+    """
+    global _prefetched_jobs
+
+    try:
+        inspect = current_app.control.inspect()
+        reserved = inspect.reserved()
+
+        if not reserved or worker_name not in reserved:
+            return None
+
+        reserved_tasks = reserved[worker_name]
+        if not reserved_tasks:
+            return None
+
+        # Find first task that isn't current job and hasn't been prefetched
+        for task_info in reserved_tasks:
+            if not task_info.get('args'):
+                continue
+
+            next_job_id = task_info['args'][0]
+
+            # Skip if it's the current job or already prefetched
+            if next_job_id == current_job_id:
+                continue
+            if next_job_id in _prefetched_jobs:
+                logger.info(f"  Job {next_job_id} already prefetched, skipping")
+                return next_job_id
+
+            # Found a new job to prefetch
+            logger.info(f"  >>> FOUND Next job in queue: {next_job_id}")
+            _prefetched_jobs.add(next_job_id)
+
+            # Start background prefetch thread
+            def prefetch_files_for_job(job_id):
+                """Background thread to copy files for next job"""
+                try:
+                    supabase = get_supabase_client()
+                    logger.info(f"  Starting background prefetch for job {job_id}")
+
+                    # Get next job items
+                    next_items = supabase.table("job_items").select("*").eq("job_id", job_id).execute().data
+                    if not next_items:
+                        logger.warning(f"  No items found for job {job_id}")
+                        return
+
+                    # Batch query paths
+                    next_video_ids = [item['video_id'] for item in next_items if item.get('video_id')]
+                    next_videos_info = {}
+                    if next_video_ids:
+                        next_videos_info = get_videos_info_by_ids(next_video_ids)
+
+                    # Build file list
+                    next_files = []
+                    for item in next_items:
+                        if item.get('video_id') and item['video_id'] in next_videos_info:
+                            source_path = next_videos_info[item['video_id']]['path']
+                        else:
+                            source_path = item.get('path')
+
+                        if source_path:
+                            normalized = normalize_path_for_server(source_path)
+                            file_ext = Path(normalized).suffix
+                            filename = f"{item['item_type']}_{item['position']}{file_ext}"
+                            next_files.append({'source_path': normalized, 'dest_filename': filename})
+
+                        # Add logo if exists
+                        if item['item_type'] == 'video' and item.get('logo_path'):
+                            logo_normalized = normalize_path_for_server(item['logo_path'])
+                            logo_filename = f"logo_{item['position']}.png"
+                            next_files.append({'source_path': logo_normalized, 'dest_filename': logo_filename})
+
+                    # Copy files in parallel
+                    if next_files:
+                        settings = get_settings()
+                        dest_dir = str(Path(settings.temp_dir) / job_id)
+                        logger.info(f"  Prefetching {len(next_files)} files for job {job_id}")
+                        copy_files_parallel(next_files, dest_dir, max_workers=5)
+                        logger.info(f"  Prefetch completed for job {job_id}")
+
+                except Exception as e:
+                    logger.warning(f"  Prefetch failed for job {job_id}: {e}")
+
+            # Start background thread
+            prefetch_thread = Thread(target=prefetch_files_for_job, args=(next_job_id,), daemon=True)
+            prefetch_thread.start()
+            logger.info(f"  Background prefetch thread started for {next_job_id}")
+            return next_job_id
+
+        return None
+
+    except Exception as e:
+        logger.warning(f"  Could not check for next job: {e}")
+        return None
 
 @app.task(bind=True)
 def process_standard_compilation(self, job_id: str):
@@ -57,10 +167,18 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
     job = job_result.data[0]
     user_id = job.get('user_id', 'unknown')
-    username = "Uzasch"  # Default username
 
-    # Setup job logger (use user_id instead of username)
-    logger, log_path = setup_job_logger(job_id, user_id, job['channel_name'])
+    # Get username from profiles table
+    username = "unknown"
+    try:
+        profile_result = supabase.table("profiles").select("username").eq("id", user_id).execute()
+        if profile_result.data:
+            username = profile_result.data[0].get('username', 'unknown')
+    except Exception:
+        pass  # Use default if lookup fails
+
+    # Setup job logger with username for readable log paths
+    logger, log_path = setup_job_logger(job_id, username, job['channel_name'])
     log_dir = str(Path(log_path).parent)  # Get directory for stderr and command files
 
     logger.info(f"=== Starting Compilation Job {job_id} ===")
@@ -87,86 +205,8 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
         # Step 0: Start prefetching files for next job (if exists) in background
         logger.info("Step 0: Checking for next job in queue to prefetch")
-        try:
-            from celery import current_app
-            from threading import Thread
-
-            # Check if worker has a prefetched job
-            inspect = current_app.control.inspect()
-            worker_name = task.request.hostname
-            reserved = inspect.reserved()
-
-            next_job_id = None
-            if reserved and worker_name in reserved:
-                reserved_tasks = reserved[worker_name]
-                # Find next job (should be second in list since current is first)
-                if len(reserved_tasks) > 1:
-                    next_task = reserved_tasks[1]
-                    # Extract job_id from task args
-                    if next_task.get('args') and len(next_task['args']) > 0:
-                        next_job_id = next_task['args'][0]
-                        logger.info(f"  Next job in queue: {next_job_id}")
-
-                        # Start background thread to prefetch files
-                        def prefetch_files_for_job(next_job_id):
-                            """Background thread to copy files for next job"""
-                            try:
-                                prefetch_logger = logging.getLogger(f"prefetch_{next_job_id}")
-                                logger.info(f"  Starting background prefetch for job {next_job_id}")
-
-                                # Get next job items
-                                next_items = supabase.table("job_items").select("*").eq("job_id", next_job_id).execute().data
-                                if not next_items:
-                                    return
-
-                                # Batch query paths
-                                next_video_ids = [item['video_id'] for item in next_items if item.get('video_id')]
-                                next_videos_info = {}
-                                if next_video_ids:
-                                    next_videos_info = get_videos_info_by_ids(next_video_ids)
-
-                                # Build file list
-                                next_files = []
-                                for item in next_items:
-                                    if item.get('video_id'):
-                                        source_path = next_videos_info[item['video_id']]['path']
-                                    else:
-                                        source_path = item.get('path')
-
-                                    if source_path:
-                                        normalized = normalize_path_for_server(source_path)
-                                        file_ext = Path(normalized).suffix
-                                        filename = f"{item['item_type']}_{item['position']}{file_ext}"
-                                        next_files.append({'source_path': normalized, 'dest_filename': filename})
-
-                                    # Add logo if exists
-                                    if item['item_type'] == 'video' and item.get('logo_path'):
-                                        logo_normalized = normalize_path_for_server(item['logo_path'])
-                                        logo_filename = f"logo_{item['position']}.png"
-                                        next_files.append({'source_path': logo_normalized, 'dest_filename': logo_filename})
-
-                                # Copy files in parallel
-                                if next_files:
-                                    settings = get_settings()
-                                    dest_dir = str(Path(settings.temp_dir) / next_job_id)
-                                    logger.info(f"  Prefetching {len(next_files)} files for job {next_job_id}")
-                                    copy_files_parallel(next_files, dest_dir, max_workers=5)
-                                    logger.info(f"  ✓ Prefetch completed for job {next_job_id}")
-
-                            except Exception as e:
-                                logger.warning(f"  Prefetch failed for job {next_job_id}: {e}")
-
-                        # Start background thread
-                        prefetch_thread = Thread(target=prefetch_files_for_job, args=(next_job_id,), daemon=True)
-                        prefetch_thread.start()
-                        logger.info(f"  Background prefetch thread started for {next_job_id}")
-                    else:
-                        logger.info("  No next job found in queue")
-            else:
-                logger.info("  No reserved tasks found (worker queue empty)")
-
-        except Exception as e:
-            logger.warning(f"  Could not check for next job: {e}")
+        worker_name = task.request.hostname
+        check_and_prefetch_next_job(worker_name, logger, current_job_id=job_id)
 
         # Step 1a: Batch query all video paths upfront (1 query instead of N)
         logger.info("Step 1a: Batch querying video paths from BigQuery")
@@ -335,7 +375,8 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             job_id,
             total_duration,
             logger,
-            log_dir
+            log_dir,
+            worker_name=worker_name
         )
 
         if returncode != 0:

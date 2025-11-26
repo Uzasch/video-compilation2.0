@@ -54,7 +54,12 @@ def setup_validation_logger(username: str):
 def setup_job_logger(job_id: str, username: str, channel_name: str):
     """
     Create structured logger for each job.
-    Log path: logs/{date}/{username}/jobs/{channel_name}_{job_id}.log
+    Log path: logs/{date}/{username}/jobs/{channel_name}_{job_id}/job.log
+
+    Each job gets its own folder containing:
+    - job.log: Main job log
+    - ffmpeg_cmd.txt: FFmpeg command (written by progress_parser)
+    - ffmpeg_stderr.txt: FFmpeg stderr output (written by progress_parser)
 
     Used for:
     - Celery worker job processing
@@ -68,10 +73,12 @@ def setup_job_logger(job_id: str, username: str, channel_name: str):
     now = datetime.now()
     date_str = now.strftime('%Y-%m-%d')
 
-    log_dir = Path(settings.log_dir) / date_str / username / "jobs"
+    # Create job-specific folder
+    job_folder = f"{channel_name}_{job_id}"
+    log_dir = Path(settings.log_dir) / date_str / username / "jobs" / job_folder
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    log_file = log_dir / f"{channel_name}_{job_id}.log"
+    log_file = log_dir / "job.log"
 
     # Create logger
     logger = logging.getLogger(f"job_{job_id}")

@@ -295,7 +295,7 @@ PlayResY: 1080
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Impact,50,&H00FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,3,9,40,40,40,1
+Style: Default,Impact,50,&H00FFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,4,3,9,20,20,20,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -333,8 +333,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             start_str = format_time(start_time)
             end_str = format_time(min(end_time, video_duration))
 
-            # Add fade effect for smooth appearance
-            ass_content += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{{\\fad(150,0)}}{substring}\\N\n"
+            # Add fade effect and force top-right alignment with \an9
+            ass_content += f"Dialogue: 0,{start_str},{end_str},Default,,0,0,0,,{{\\an9\\fad(150,0)}}{substring}\n"
 
     # Write ASS file
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)

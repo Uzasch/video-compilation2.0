@@ -280,6 +280,16 @@ def copy_file_sequential(
         logger.error(f"Source file not found: {normalized_source}")
         return None
 
+    # Check if destination already exists (skip if prefetched)
+    if dest_file.exists():
+        source_size = source_file_path.stat().st_size
+        dest_size = dest_file.stat().st_size
+        if source_size == dest_size:
+            logger.info(f"  Skipping (already exists): {dest_file.name}")
+            return str(dest_file)
+        else:
+            logger.warning(f"  File exists but size mismatch ({dest_size} != {source_size}), re-copying: {dest_file.name}")
+
     if not use_optimal_method:
         # Skip to shutil directly
         return _copy_with_shutil(normalized_source, dest_file)

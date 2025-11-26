@@ -5,6 +5,7 @@ Submits 2 jobs with text animation to test both features
 import requests
 import time
 import json
+import redis
 
 # Read video IDs from temp.txt
 with open('temp.txt', 'r') as f:
@@ -20,6 +21,52 @@ SUBMIT_URL = f"{BASE_URL}/submit"
 
 # Test user
 USER_ID = "e6dc178a-545c-483b-999a-dcc86480d962"
+
+# Redis connection for queue inspection
+REDIS_URL = "redis://localhost:6379/0"
+
+def inspect_queues():
+    """Inspect Redis queues and Celery state directly"""
+    print("\n" + "-" * 60)
+    print("[QUEUE INSPECTION]")
+    print("-" * 60)
+
+    try:
+        r = redis.from_url(REDIS_URL)
+
+        # Check queue lengths
+        queues = ['gpu_queue', 'default_queue', '4k_queue']
+        for queue in queues:
+            length = r.llen(queue)
+            print(f"  {queue}: {length} tasks")
+
+            # Peek at first task if exists
+            if length > 0:
+                first_task = r.lindex(queue, 0)
+                if first_task:
+                    try:
+                        task_data = json.loads(first_task)
+                        task_id = task_data.get('headers', {}).get('id', 'unknown')
+                        task_args = task_data.get('body', '')[:100]  # First 100 chars
+                        print(f"    First task ID: {task_id}")
+                    except:
+                        print(f"    First task: {str(first_task)[:100]}...")
+
+        # Try Celery inspect via Flower API if available
+        try:
+            flower_response = requests.get("http://localhost:5555/api/workers", timeout=2)
+            if flower_response.status_code == 200:
+                workers = flower_response.json()
+                print(f"\n  Flower Workers: {list(workers.keys())}")
+                for worker_name, worker_info in workers.items():
+                    print(f"    {worker_name}: status={worker_info.get('status', 'unknown')}")
+        except:
+            print("\n  (Flower API not available)")
+
+    except Exception as e:
+        print(f"  Error inspecting queues: {e}")
+
+    print("-" * 60)
 
 def verify_videos():
     """Verify videos and get metadata"""
@@ -206,15 +253,35 @@ print("\n" + "=" * 60)
 print("SUBMITTING BOTH JOBS")
 print("=" * 60)
 
-job_id_1 = submit_job(0, items_with_text)
-time.sleep(2)  # Small delay between submissions
-job_id_2 = submit_job(1, items_with_text)
+# Check queue before submitting
+print("\n[BEFORE SUBMIT]")
+inspect_queues()
+
+# Submit both jobs simultaneously using threads to ensure both are in queue
+# before worker picks up Job #1
+from concurrent.futures import ThreadPoolExecutor
+import copy
+
+print("\n[SUBMITTING BOTH JOBS SIMULTANEOUSLY]")
+with ThreadPoolExecutor(max_workers=2) as executor:
+    # Submit both API calls at the same time
+    future1 = executor.submit(submit_job, 0, copy.deepcopy(items_with_text))
+    future2 = executor.submit(submit_job, 1, copy.deepcopy(items_with_text))
+
+    job_id_1 = future1.result()
+    job_id_2 = future2.result()
+
+# Check queue after both jobs submitted
+print("\n[AFTER BOTH JOBS SUBMIT]")
+inspect_queues()
 
 print("\n" + "=" * 60)
 print("MONITORING JOB #1")
 print("=" * 60)
 print("\n[NOTE] While job #1 runs, check Celery logs for prefetch messages:")
 print("   docker logs video-compilation-celery -f | grep -i prefetch")
+print("\n[NOTE] Check job log for DEBUG output:")
+print(f"   Look for: 'task_acks_late:', 'Active tasks:', 'Reserved tasks:'")
 print()
 
 # Monitor first job
@@ -234,7 +301,7 @@ if success:
     print(f"   - 'Next job in queue: {job_id_2}'")
     print(f"   - 'Background prefetch thread started for {job_id_2}'")
     print(f"   - 'Prefetching N files for job {job_id_2}'")
-    print(f"   - '✓ Prefetch completed for job {job_id_2}'")
+    print(f"   - 'Prefetch completed for job {job_id_2}'")
 
     print("\n[CHECK 3] Job #2 should start faster:")
     print(f"   Monitor job #2 to see if file copying is skipped/faster")

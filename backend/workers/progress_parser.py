@@ -31,9 +31,10 @@ def parse_ffmpeg_progress(line: str) -> dict:
 
     return result
 
-def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logger, log_dir: str):
+def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logger, log_dir: str, worker_name: str = None):
     """
     Run FFmpeg command and parse progress, updating Supabase in real-time.
+    Periodically checks for new jobs in queue and starts prefetching.
 
     Args:
         cmd: FFmpeg command as list
@@ -41,6 +42,7 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
         total_duration: Total expected output duration in seconds
         logger: Job logger instance
         log_dir: Directory where log files are stored (for stderr and command files)
+        worker_name: Celery worker hostname (for prefetch checks)
     """
     from pathlib import Path
     supabase = get_supabase_client()
@@ -63,7 +65,17 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
     )
 
     last_progress = 0
+    last_prefetch_check = 0  # Track when we last checked for prefetch
     stderr_lines = []  # Collect all stderr for full error reporting
+
+    # Import prefetch function
+    prefetch_func = None
+    if worker_name:
+        try:
+            from workers.tasks import check_and_prefetch_next_job
+            prefetch_func = check_and_prefetch_next_job
+        except ImportError:
+            logger.warning("Could not import prefetch function")
 
     for line in process.stderr:
         stderr_lines.append(line)  # Store all stderr lines
@@ -88,6 +100,15 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
                     last_progress = progress
                 except Exception as e:
                     logger.error(f"Failed to update progress: {e}")
+
+                # Check for new jobs to prefetch every 20% progress (separate from DB update)
+                if prefetch_func and progress >= last_prefetch_check + 20:
+                    try:
+                        logger.info(f"  [Prefetch check at {progress}%]")
+                        prefetch_func(worker_name, logger, current_job_id=job_id)
+                        last_prefetch_check = progress
+                    except Exception as e:
+                        logger.warning(f"  Prefetch check failed: {e}")
 
     # Wait for process to complete
     returncode = process.wait()
