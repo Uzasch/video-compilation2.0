@@ -1162,8 +1162,8 @@ celery -A workers.celery_app worker \
 ### **Infrastructure**
 - [x] Redis running and accessible
 - [x] Workers start successfully on all PCs
-  - [x] PC1: All queues (4k + gpu + default) - Tested with GPU encoding
-  - [ ] PC2/PC3: Default queue only - Not yet deployed
+  - [x] PC1 (192.168.1.83): All queues (4k + gpu + default) - Tested with GPU encoding
+  - [x] PC2 (192.168.1.242): Default queue - Tested and working!
 
 ### **Testing & Validation**
 - [x] Test job submission and processing - ✅ Successfully completed job
@@ -1174,6 +1174,7 @@ celery -A workers.celery_app worker \
 - [x] **Text animation position (top-right)** - ✅ Fixed with `\an9` override tag
 - [x] **Batch operations working** (1 BigQuery query, parallel copies, parallel ffprobe) - ✅ Verified in logs
 - [x] **Prefetch optimization working** (task_acks_late enables reserved task visibility) - ✅ WORKING: Prefetch + periodic checks + skip existing files
+- [x] **Multi-worker load balancing** - ✅ PC1 + PC2 tested, jobs distributed evenly
 - [x] FFmpeg stderr and command files saved correctly - ✅ Both files created
 - [x] **GPU encoding working** (verify h264_nvenc available on all PCs) - ✅ Verified h264_nvenc on PC1 (GTX 1060)
 - [ ] **Output quality matches Adobe Premiere** (check bitrate, audio, resolution) - Needs visual inspection
