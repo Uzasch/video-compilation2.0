@@ -109,7 +109,7 @@ services:
     env_file:
       - ./frontend/video-compilation2.0/.env
     environment:
-      - VITE_API_URL=http://localhost:8000
+      - VITE_API_URL=http://localhost:8000/api
     depends_on:
       - backend
     networks:
