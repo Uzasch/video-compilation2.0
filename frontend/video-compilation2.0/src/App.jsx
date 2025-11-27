@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
 import { AuthProvider } from './hooks/useAuth'
+import { ThemeProvider } from './hooks/useTheme'
 import ProtectedRoute from './components/ProtectedRoute'
 
 // Pages
@@ -24,10 +25,11 @@ const queryClient = new QueryClient({
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <BrowserRouter>
-          <Toaster position="top-right" richColors />
+    <ThemeProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <BrowserRouter>
+            <Toaster position="top-right" richColors />
           <Routes>
             {/* Public routes */}
             <Route path="/login" element={<Login />} />
@@ -79,9 +81,10 @@ function App() {
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
-        </BrowserRouter>
-      </AuthProvider>
-    </QueryClientProvider>
+          </BrowserRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   )
 }
 

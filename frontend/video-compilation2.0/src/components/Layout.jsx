@@ -1,13 +1,20 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Command, CommandGroup, CommandItem, CommandList } from '@/components/ui/command'
 import { useAuth } from '../hooks/useAuth'
-import { LogOut, Home, FileVideo, History, Settings, Video } from 'lucide-react'
+import { useTheme } from '../hooks/useTheme'
+import { LogOut, Home, FileVideo, History, Settings, Video, Sun, Moon, Palette, Check } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { useState } from 'react'
 
 export default function Layout({ children }) {
   const { user, logout } = useAuth()
+  const { mode, toggleMode, colorTheme, setColorTheme, colorThemes } = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
+  const [themeOpen, setThemeOpen] = useState(false)
 
   const handleLogout = async () => {
     await logout()
@@ -38,6 +45,9 @@ export default function Layout({ children }) {
                 </h1>
               </Link>
 
+              {/* Dotted separator */}
+              <div className="dotted-separator hidden md:block" />
+
               {/* Navigation */}
               <nav className="hidden md:flex gap-2">
                 <Link to="/" className={navLinkClass('/')}>
@@ -62,7 +72,58 @@ export default function Layout({ children }) {
             </div>
 
             {/* User menu */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              {/* Theme selector */}
+              <Popover open={themeOpen} onOpenChange={setThemeOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    <Palette size={18} />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-48 p-0" align="end">
+                  <Command>
+                    <CommandList>
+                      <CommandGroup heading="Color Theme">
+                        {colorThemes.map((theme) => (
+                          <CommandItem
+                            key={theme.id}
+                            value={theme.id}
+                            onSelect={() => {
+                              setColorTheme(theme.id)
+                              setThemeOpen(false)
+                            }}
+                          >
+                            {theme.name}
+                            <Check
+                              className={cn(
+                                "ml-auto h-4 w-4",
+                                colorTheme === theme.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+
+              {/* Mode toggle */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={toggleMode}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {mode === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+              </Button>
+
+              <div className="dotted-separator hidden sm:block" />
+
               <div className="hidden sm:flex flex-col items-end">
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-sm">
@@ -79,7 +140,7 @@ export default function Layout({ children }) {
                 </span>
               </div>
 
-              <div className="h-8 w-[1px] bg-border hidden sm:block" />
+              <div className="dotted-separator hidden sm:block" />
 
               <Button
                 variant="ghost"
