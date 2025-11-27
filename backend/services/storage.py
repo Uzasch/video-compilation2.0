@@ -586,13 +586,15 @@ def copy_file_to_temp(source_path: str, job_id: str, filename: str) -> str:
     return result
 
 
-def copy_file_to_output(temp_path: str, filename: str) -> str:
+def copy_file_to_output(temp_path: str, filename: str, username: str = None) -> str:
     """
     Copy a file from temp to output directory.
+    Output path: {output_dir}/{username}/{filename}
 
     Args:
         temp_path: Path to file in temp directory
         filename: Output filename
+        username: Username for subdirectory (creates {output_dir}/{username}/)
 
     Returns:
         Final output file path
@@ -602,6 +604,11 @@ def copy_file_to_output(temp_path: str, filename: str) -> str:
     """
     settings = get_settings()
     output_dir = Path(settings.output_dir)
+
+    # Create user subdirectory if username provided
+    if username:
+        output_dir = output_dir / username
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     result = copy_file_sequential(temp_path, str(output_dir), filename)
 

@@ -382,9 +382,9 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         if returncode != 0:
             raise Exception(f"FFmpeg failed with return code {returncode}")
 
-        # Step 5: Copy to output
+        # Step 5: Copy to output (organized by username)
         logger.info("Step 5: Copying output to SMB")
-        final_output_path = copy_file_to_output(output_path, output_filename)
+        final_output_path = copy_file_to_output(output_path, output_filename, username=username)
         logger.info(f"  Output: {final_output_path}")
 
         # Step 6: Update job as completed
