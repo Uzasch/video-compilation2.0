@@ -588,13 +588,15 @@ def copy_file_to_temp(source_path: str, job_id: str, filename: str) -> str:
 
 def copy_file_to_output(temp_path: str, filename: str, username: str = None) -> str:
     """
-    Copy a file from temp to output directory.
-    Output path: {output_dir}/{username}/{filename}
+    Copy a file from temp to SMB output directory.
+    Output path: {smb_output_path}/{username}/{filename}
+
+    Example: \\192.168.1.6\Share3\Public\video-compilation\uzair\channel_jobid.mp4
 
     Args:
         temp_path: Path to file in temp directory
         filename: Output filename
-        username: Username for subdirectory (creates {output_dir}/{username}/)
+        username: Username for subdirectory (creates {smb_output_path}/{username}/)
 
     Returns:
         Final output file path
@@ -603,14 +605,17 @@ def copy_file_to_output(temp_path: str, filename: str, username: str = None) -> 
         Exception: If copy fails
     """
     settings = get_settings()
-    output_dir = Path(settings.output_dir)
+
+    # Use SMB output path (network share)
+    output_dir = normalize_path_for_server(settings.smb_output_path)
+    output_path = Path(output_dir)
 
     # Create user subdirectory if username provided
     if username:
-        output_dir = output_dir / username
-        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_path / username
+        output_path.mkdir(parents=True, exist_ok=True)
 
-    result = copy_file_sequential(temp_path, str(output_dir), filename)
+    result = copy_file_sequential(temp_path, str(output_path), filename)
 
     if not result:
         raise Exception(f"Failed to copy file to output: {temp_path}")
