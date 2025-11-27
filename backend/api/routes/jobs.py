@@ -2,9 +2,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 from services.bigquery import get_videos_info_by_ids, get_all_channel_assets, get_production_path
-from services.storage import normalize_paths
+from services.storage import normalize_paths, normalize_path_for_server
 from services.supabase import get_supabase_client
-from services.logger import setup_validation_logger
+from services.logger import setup_validation_logger, setup_job_logger
 from utils.video_utils import get_videos_info_batch
 from datetime import datetime
 from uuid import uuid4
@@ -498,21 +498,41 @@ async def move_to_production(job_id: str, request: MoveToProductionRequest):
     if job.get('moved_to_production'):
         raise HTTPException(status_code=400, detail="Already moved to production")
 
-    # 2. Get production path from BigQuery
-    production_base = get_production_path(job['channel_name'])
-    if not production_base:
+    # Get username for logging
+    user_result = supabase.table('profiles').select('username').eq('id', job['user_id']).execute()
+    username = user_result.data[0]['username'] if user_result.data else 'unknown'
+
+    # Setup job logger (appends to existing job log)
+    job_logger, log_path = setup_job_logger(job_id, username, job['channel_name'])
+
+    job_logger.info("")
+    job_logger.info("=== Move to Production ===")
+    job_logger.info(f"Job ID: {job_id}")
+    job_logger.info(f"Channel: {job['channel_name']}")
+    job_logger.info(f"Custom filename requested: {request.custom_filename or 'None (auto-generate)'}")
+
+    # 2. Get production path from BigQuery and normalize for server
+    production_base_raw = get_production_path(job['channel_name'])
+    if not production_base_raw:
+        job_logger.error(f"Production path not configured for channel: {job['channel_name']}")
         raise HTTPException(
             status_code=404,
             detail=f"Production path not configured for channel: {job['channel_name']}"
         )
 
+    # Normalize path (convert Windows UNC to Docker mount path)
+    production_base = normalize_path_for_server(production_base_raw)
+    job_logger.info(f"Production base path: {production_base_raw} -> {production_base}")
+
     # 3. Generate production filename
     if request.custom_filename:
         base_name = sanitize_filename(request.custom_filename)
+        job_logger.info(f"Using custom filename: {request.custom_filename} -> {base_name}")
     else:
         # Auto-generate: channelname_2025-01-18_143022.mp4
         timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
         base_name = sanitize_filename(f"{job['channel_name']}_{timestamp}")
+        job_logger.info(f"Auto-generated filename: {base_name}")
 
     production_filename = f"{base_name}.mp4"
 
@@ -523,12 +543,17 @@ async def move_to_production(job_id: str, request: MoveToProductionRequest):
     # 5. Copy from temp to production
     temp_path = Path(job['output_path'])
 
+    job_logger.info(f"Source: {temp_path}")
+    job_logger.info(f"Destination: {production_path}")
+
     try:
         # Ensure production directory exists
         production_dir.mkdir(parents=True, exist_ok=True)
 
         # Copy file
+        job_logger.info("Copying file...")
         shutil.copy2(temp_path, production_path)
+        job_logger.info("File copied successfully")
 
         # 6. Update database
         supabase.table('jobs').update({
@@ -537,6 +562,9 @@ async def move_to_production(job_id: str, request: MoveToProductionRequest):
             'production_moved_at': datetime.utcnow().isoformat()
         }).eq('job_id', job_id).execute()
 
+        job_logger.info("Database updated")
+        job_logger.info(f"Result: SUCCESS - {production_filename}")
+
         return {
             'success': True,
             'production_path': str(production_path),
@@ -544,6 +572,7 @@ async def move_to_production(job_id: str, request: MoveToProductionRequest):
         }
 
     except Exception as e:
+        job_logger.error(f"Failed to move to production: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to move to production: {str(e)}")
 
 
