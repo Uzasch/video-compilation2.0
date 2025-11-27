@@ -108,7 +108,7 @@ def build_unified_compilation_command(
                 f"[{item_input_idx}:v]scale={target_width}:{target_height}:"
                 f"force_original_aspect_ratio=decrease,"
                 f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:black,"
-                f"fps=30[v{i}_scaled]"
+                f"setsar=1,fps=30[v{i}_scaled]"
             )
 
             # Create silent audio for image
@@ -124,7 +124,8 @@ def build_unified_compilation_command(
             filter_complex.append(
                 f"[{item_input_idx}:v]scale={target_width}:{target_height}:"
                 f"force_original_aspect_ratio=decrease,"
-                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:black[v{i}_scaled]"
+                f"pad={target_width}:{target_height}:(ow-iw)/2:(oh-ih)/2:black,"
+                f"setsar=1[v{i}_scaled]"
             )
 
             video_stream = f"[v{i}_scaled]"

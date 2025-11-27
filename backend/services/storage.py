@@ -101,8 +101,23 @@ def normalize_paths(paths: List[str]) -> List[str]:
 
         # Case 1: SMB URL (smb://192.168.1.6/Share4/...)
         if path.startswith("smb://"):
-            path = path.replace("smb://", "\\\\")
-            path = path.replace("/", "\\")
+            # Extract share name and remaining path
+            # smb://192.168.1.6/Share3/Public/video -> Share3, Public/video
+            parts = path.replace("smb://", "").split("/")
+            if len(parts) >= 2:
+                share_name = parts[1]  # e.g., "Share3"
+                remaining = "/".join(parts[2:]) if len(parts) > 2 else ""
+
+                if IS_DOCKER and share_name in DOCKER_MOUNTS:
+                    # Convert to Docker mount path
+                    path = f"{DOCKER_MOUNTS[share_name]}/{remaining}".rstrip("/")
+                else:
+                    # Convert to UNC path
+                    path = f"\\\\192.168.1.6\\{share_name}\\{remaining}".replace("/", "\\")
+            else:
+                # Fallback: simple conversion
+                path = path.replace("smb://", "\\\\")
+                path = path.replace("/", "\\")
             normalized.append(path)
             continue
 
@@ -591,7 +606,7 @@ def copy_file_to_output(temp_path: str, filename: str, username: str = None) -> 
     Copy a file from temp to SMB output directory.
     Output path: {smb_output_path}/{username}/{filename}
 
-    Example: \\192.168.1.6\Share3\Public\video-compilation\uzair\channel_jobid.mp4
+    Example: \\\\192.168.1.6\\Share3\\Public\\video-compilation\\username\\channel_jobid.mp4
 
     Args:
         temp_path: Path to file in temp directory
