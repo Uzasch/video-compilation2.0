@@ -62,6 +62,7 @@ test/
 # OS files
 Thumbs.db
 Desktop.ini
+nul
 
 # Python specific
 *.py[cod]
