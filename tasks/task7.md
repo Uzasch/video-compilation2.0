@@ -13,7 +13,6 @@ Build the main compilation workflow: Dashboard with active jobs, New Compilation
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from '../services/supabase'
 import { useAuth } from '../hooks/useAuth'
 import apiClient from '../services/api'
 import Layout from '../components/Layout'
@@ -21,7 +20,7 @@ import JobCard from '../components/JobCard'
 import { Plus, Loader } from 'lucide-react'
 
 export default function Dashboard() {
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const [jobs, setJobs] = useState([])
 
@@ -29,18 +28,12 @@ export default function Dashboard() {
   const { data: initialJobs, isLoading } = useQuery({
     queryKey: ['activeJobs', user?.id],
     queryFn: async () => {
-      const query = supabase
-        .from('jobs')
-        .select('*')
-        .in('status', ['queued', 'processing'])
-        .order('created_at', { ascending: false })
-
-      if (profile?.role !== 'admin') {
-        query.eq('user_id', user.id)
+      // Use API client instead of direct Supabase query
+      const params = { status: 'active' }
+      if (user?.role !== 'admin') {
+        params.user_id = user.id
       }
-
-      const { data, error } = await query
-      if (error) throw error
+      const { data } = await apiClient.get('/jobs', { params })
       return data
     },
     enabled: !!user
@@ -63,44 +56,27 @@ export default function Dashboard() {
     }
   }, [initialJobs])
 
-  // Real-time subscription for job updates
+  // Polling for job updates (alternative to real-time subscriptions)
+  // For real-time updates, you can integrate Supabase Realtime separately
   useEffect(() => {
     if (!user) return
 
-    const channel = supabase
-      .channel('jobs_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'jobs',
-          filter: profile?.role === 'admin' ? undefined : `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          if (payload.eventType === 'INSERT') {
-            setJobs((prev) => [payload.new, ...prev])
-          } else if (payload.eventType === 'UPDATE') {
-            setJobs((prev) =>
-              prev.map((job) =>
-                job.job_id === payload.new.job_id ? payload.new : job
-              )
-            )
-            // Remove from active if completed/failed/cancelled
-            if (['completed', 'failed', 'cancelled'].includes(payload.new.status)) {
-              setJobs((prev) => prev.filter((job) => job.job_id !== payload.new.job_id))
-            }
-          } else if (payload.eventType === 'DELETE') {
-            setJobs((prev) => prev.filter((job) => job.job_id !== payload.old.job_id))
-          }
+    // Poll for updates every 5 seconds
+    const interval = setInterval(async () => {
+      try {
+        const params = { status: 'active' }
+        if (user?.role !== 'admin') {
+          params.user_id = user.id
         }
-      )
-      .subscribe()
+        const { data } = await apiClient.get('/jobs', { params })
+        setJobs(data || [])
+      } catch (error) {
+        console.error('Failed to fetch jobs:', error)
+      }
+    }, 5000)
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [user, profile])
+    return () => clearInterval(interval)
+  }, [user])
 
   return (
     <Layout>
@@ -353,43 +329,30 @@ export default function NewCompilation() {
   const { data: channels } = useQuery({
     queryKey: ['channels'],
     queryFn: async () => {
-      const { data } = await apiClient.get('/channels')
-      return data
+      const { data } = await apiClient.get('/admin/channels')
+      return data.channels  // Extract channels array from response
     }
   })
 
-  // Step 1: Verify and build initial sequence from video IDs
+  // Verify and build sequence from video IDs (single step - backend does path verification)
   const verifyMutation = useMutation({
-    mutationFn: async ({ channel, videoIds }) => {
+    mutationFn: async ({ channel, videoIds, manualPaths = [] }) => {
       const { data } = await apiClient.post('/jobs/verify', {
         channel_name: channel,
-        video_ids: videoIds.split('\n').map(id => id.trim()).filter(Boolean)
+        video_ids: videoIds.split('\n').map(id => id.trim()).filter(Boolean),
+        manual_paths: manualPaths  // For manually added paths
       })
       return data
     },
     onSuccess: (data) => {
       setSequence(data)
-      setPathsVerified(false)  // Reset path verification when new sequence loaded
-    }
-  })
+      // Check if all paths are available
+      const allAvailable = data.items.every(item => item.path_available)
+      setPathsVerified(allAvailable)
 
-  // Step 2: Verify all paths exist and get durations
-  const verifyPathsMutation = useMutation({
-    mutationFn: async (jobData) => {
-      const { data } = await apiClient.post('/jobs/verify-paths', jobData)
-      return data
-    },
-    onSuccess: (data) => {
-      // Update sequence with verified paths and durations
-      setSequence({
-        ...sequence,
-        items: data.items,
-        total_duration: data.total_duration
-      })
-      setPathsVerified(data.all_valid)
-
-      if (!data.all_valid) {
-        alert(`${data.missing_count} item(s) have unavailable paths. Please fix or delete them.`)
+      if (!allAvailable) {
+        const missingCount = data.items.filter(item => !item.path_available).length
+        alert(`${missingCount} item(s) have unavailable paths. Please fix or delete them.`)
       }
     }
   })
@@ -413,22 +376,25 @@ export default function NewCompilation() {
     verifyMutation.mutate({ channel, videoIds })
   }
 
-  const handleVerifyPaths = () => {
+  // Re-verify after manual edits (e.g., fixing paths)
+  const handleReverify = () => {
     if (!sequence) return
+    // Collect any manually edited paths
+    const manualPaths = sequence.items
+      .filter(item => item.item_type === 'transition' || item.item_type === 'image')
+      .filter(item => item.path)
+      .map(item => item.path)
 
-    const jobData = {
-      user_id: user.id,
-      channel_name: channel,
-      enable_4k: enable4k,
-      items: sequence.items
-    }
-
-    verifyPathsMutation.mutate(jobData)
+    verifyMutation.mutate({
+      channel,
+      videoIds,  // Re-verify with original video IDs
+      manualPaths
+    })
   }
 
   const handleSubmit = () => {
     if (!sequence || !pathsVerified) {
-      alert('Please verify all paths first by clicking "Verify & Process"')
+      alert('Please verify all paths are available before submitting')
       return
     }
 
@@ -537,7 +503,7 @@ export default function NewCompilation() {
               onChange={setSequence}
             />
 
-            {/* Verify & Submit buttons */}
+            {/* Summary & Submit */}
             <div className="bg-white rounded-lg shadow p-6">
               <div className="space-y-4">
                 {/* Summary */}
@@ -554,7 +520,7 @@ export default function NewCompilation() {
                   )}
                   {!pathsVerified && (
                     <p className="text-sm text-amber-600 mt-2">
-                      ⚠ Paths not verified yet. Click "Verify & Process" to check all files.
+                      ⚠ Some paths are unavailable. Fix them and click "Re-verify" before submitting.
                     </p>
                   )}
                   {pathsVerified && (
@@ -566,13 +532,15 @@ export default function NewCompilation() {
 
                 {/* Action buttons */}
                 <div className="flex gap-3">
-                  <button
-                    onClick={handleVerifyPaths}
-                    disabled={verifyPathsMutation.isPending}
-                    className="flex-1 py-2 px-6 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50"
-                  >
-                    {verifyPathsMutation.isPending ? 'Verifying Paths...' : 'Verify & Process'}
-                  </button>
+                  {!pathsVerified && (
+                    <button
+                      onClick={handleReverify}
+                      disabled={verifyMutation.isPending}
+                      className="flex-1 py-2 px-6 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50"
+                    >
+                      {verifyMutation.isPending ? 'Re-verifying...' : 'Re-verify Paths'}
+                    </button>
+                  )}
 
                   <button
                     onClick={handleSubmit}
@@ -585,8 +553,9 @@ export default function NewCompilation() {
 
                 {/* Help text */}
                 <p className="text-xs text-gray-500">
-                  Click "Verify & Process" to check if all files exist and get their durations.
-                  Fix any missing paths, then click "Submit Compilation" to queue the job.
+                  {pathsVerified
+                    ? 'All files verified. Click "Submit Compilation" to queue the job.'
+                    : 'Fix unavailable paths by editing items, then click "Re-verify Paths".'}
                 </p>
               </div>
             </div>
@@ -665,7 +634,7 @@ export default function SequenceEditor({ sequence, onChange }) {
       path: null,
       path_available: false,  // Will be set to true after upload or path verification
       logo_path: itemType === 'video' ? sequence.default_logo_path : null,
-      text_animation_words: [],
+      text_animation_text: null,  // Text string for letter-by-letter animation
       duration: itemType === 'image' ? 5 : null,  // Default 5 seconds for images
       title: itemType === 'image' ? 'Image Slide' : null
     }
@@ -859,7 +828,7 @@ export default function SequenceItem({ item, onUpdate, onDelete, onApplyLogoToAl
           {canHaveLogo && (
             <div>
               <label className="block text-xs font-medium mb-1 flex items-center gap-1">
-                <Image size={14} />
+                <ImageIcon size={14} />
                 Logo Path
               </label>
               <div className="flex gap-2">
@@ -886,21 +855,18 @@ export default function SequenceItem({ item, onUpdate, onDelete, onApplyLogoToAl
             </div>
           )}
 
-          {/* Text animation words (only for videos) */}
+          {/* Text animation (only for videos) */}
           {canHaveTextAnimation && (
             <div>
               <label className="block text-xs font-medium mb-1 flex items-center gap-1">
                 <Type size={14} />
-                Text Animation Words (comma-separated)
+                Text Animation
               </label>
               <input
                 type="text"
-                value={item.text_animation_words?.join(', ') || ''}
-                onChange={(e) => {
-                  const words = e.target.value.split(',').map(w => w.trim()).filter(Boolean)
-                  onUpdate(item.position, { text_animation_words: words })
-                }}
-                placeholder="Word1, Word2, Word3"
+                value={item.text_animation_text || ''}
+                onChange={(e) => onUpdate(item.position, { text_animation_text: e.target.value || null })}
+                placeholder="Text to animate letter-by-letter"
                 className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
               />
               <p className="text-xs text-gray-600 mt-1">
@@ -1126,32 +1092,32 @@ export default function ImageUpload({ item, onUpdate }) {
 
 - [ ] Dashboard page with active jobs list
 - [ ] Queue statistics card showing user's position in queue
-- [ ] Queue stats update every 5 seconds (real-time)
+- [ ] Queue stats update every 5 seconds (polling)
 - [ ] Display processing vs waiting status for each job
-- [ ] JobCard component with real-time progress
+- [ ] JobCard component with progress bar
 - [ ] JobCard displays progress_message alongside percentage
-- [ ] Real-time subscription for job updates
+- [ ] Jobs polling for updates (every 5 seconds)
 - [ ] New Compilation page with channel selection
+- [ ] Channel list from `/api/admin/channels`
 - [ ] Video ID input component
-- [ ] **Step 1:** Verify button that calls `/api/jobs/verify` (builds initial sequence)
+- [ ] Verify button calls `/api/jobs/verify` (single step - builds sequence AND verifies paths)
 - [ ] Sequence editor with all items in order
 - [ ] SequenceItem component with expandable details
-- [ ] SequenceItem shows path_available badges (✓ Available, ✗ Not Found, ⚠ Not Verified)
+- [ ] SequenceItem shows path_available badges (✓ Available, ✗ Not Found)
 - [ ] Per-video logo input with "Apply to All" button
-- [ ] Per-video text animation words input
+- [ ] Per-video text_animation_text input (string, not array)
 - [ ] Insert buttons for adding videos/transitions/images
-- [ ] ImageUpload component with preview
+- [ ] ImageUpload component with preview (uses `/api/uploads/image`)
 - [ ] Image duration and title inputs
 - [ ] Delete functionality (except intro/outro)
-- [ ] Manual path input for missing videos
-- [ ] **Step 2:** "Verify & Process" button that calls `/api/jobs/verify-paths`
-- [ ] Path verification updates all items with duration and path_available boolean
-- [ ] Show warning if paths not verified
-- [ ] Disable submit button until paths verified
-- [ ] **Step 3:** Submit button that calls `/api/jobs/submit` (only if all path_available=true)
-- [ ] Test full workflow: video IDs → edit sequence → verify paths → submit
+- [ ] Manual path input for transitions/images
+- [ ] "Re-verify" button to re-check paths after manual edits
+- [ ] Show warning if any paths unavailable
+- [ ] Disable submit button until all paths verified
+- [ ] Submit button calls `/api/jobs/submit` (only if all path_available=true)
+- [ ] Test full workflow: video IDs → verify → edit sequence → submit
 - [ ] Test image upload and insertion in sequence
-- [ ] Test fixing unavailable paths before submission
+- [ ] Test fixing unavailable paths with re-verify
 
 ---
 
