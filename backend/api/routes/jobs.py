@@ -25,6 +25,9 @@ class VerifyJobRequest(BaseModel):
     channel_name: str
     video_ids: List[str] = []      # Optional: video IDs to fetch from BigQuery
     manual_paths: List[str] = []   # Optional: manual paths user added
+    include_intro: bool = True     # Include channel intro
+    include_outro: bool = True     # Include channel outro
+    enable_logos: bool = True      # Enable logo overlay on videos
 
 class JobItem(BaseModel):
     position: int
@@ -57,6 +60,58 @@ class SubmitJobResponse(BaseModel):
 
 class MoveToProductionRequest(BaseModel):
     custom_filename: Optional[str] = None
+
+
+class VerifyPathRequest(BaseModel):
+    path: str
+
+
+class VerifyPathResponse(BaseModel):
+    path: str
+    available: bool
+    duration: Optional[float] = None
+    resolution: Optional[str] = None
+    is_4k: Optional[bool] = None
+
+
+@router.post("/verify-path", response_model=VerifyPathResponse)
+async def verify_single_path(request: VerifyPathRequest):
+    """
+    Verify a single path and return its metadata.
+
+    Used when user manually enters a path and wants to check if it's accessible.
+    Uses ffprobe to check existence and get video metadata.
+
+    Returns:
+        - path: The normalized path
+        - available: Whether the path is accessible
+        - duration: Video duration if available
+        - resolution: Video resolution (WxH) if available
+        - is_4k: Whether the video is 4K
+    """
+    from services.storage import normalize_paths
+
+    # Normalize the path
+    normalized_paths = normalize_paths([request.path])
+    normalized_path = normalized_paths[0] if normalized_paths else request.path
+
+    # Get video info using ffprobe
+    videos_info = get_videos_info_batch([normalized_path], max_workers=1)
+    video_info = videos_info.get(normalized_path)
+
+    if video_info:
+        return VerifyPathResponse(
+            path=request.path,
+            available=True,
+            duration=video_info['duration'],
+            resolution=f"{video_info['width']}x{video_info['height']}",
+            is_4k=video_info['is_4k']
+        )
+    else:
+        return VerifyPathResponse(
+            path=request.path,
+            available=False
+        )
 
 
 @router.post("/verify", response_model=VerifyJobResponse)
@@ -104,10 +159,15 @@ async def verify_job(request: VerifyJobRequest, user_id: str, max_workers: int =
     # Step 1: Get channel branding assets (batched - single query)
     validation_logger.info("Step 1: Fetching channel branding assets (batched)...")
     assets = get_all_channel_assets(request.channel_name)
-    intro_path = assets['intro']
-    outro_path = assets['outro']
-    logo_path = assets['logo']
 
+    # Apply user preferences for intro/outro/logos
+    intro_path = assets['intro'] if request.include_intro else None
+    outro_path = assets['outro'] if request.include_outro else None
+    logo_path = assets['logo'] if request.enable_logos else None
+
+    validation_logger.info(f"  Include intro: {request.include_intro}")
+    validation_logger.info(f"  Include outro: {request.include_outro}")
+    validation_logger.info(f"  Enable logos: {request.enable_logos}")
     if logo_path:
         validation_logger.info(f"  Logo: {logo_path}")
     if intro_path:
@@ -124,91 +184,103 @@ async def verify_job(request: VerifyJobRequest, user_id: str, max_workers: int =
         validation_logger.info(f"  Found {len(videos_info)}/{len(request.video_ids)} videos in BigQuery")
         validation_logger.info("")
 
-    # Step 3: Collect all paths for verification (ffprobe will determine availability)
-    all_paths = []
-    path_to_item_map = {}  # Map path → item info
+    # Step 3: Collect all items for verification
+    # Use a LIST instead of dict to handle duplicate paths (same intro/outro, repeated videos)
+    items_to_verify = []  # List of {position, path, type, video_id, title, error}
 
     # Add intro
     if intro_path:
-        all_paths.append(intro_path)
-        path_to_item_map[intro_path] = {'type': 'intro', 'position': position}
+        items_to_verify.append({
+            'position': position,
+            'path': intro_path,
+            'type': 'intro',
+            'title': 'Intro'
+        })
         position += 1
 
     # Add videos from BigQuery
     for video_id in request.video_ids:
         if video_id in videos_info:
-            path = videos_info[video_id]["path"]
-            all_paths.append(path)
-            path_to_item_map[path] = {
-                'type': 'video',
+            items_to_verify.append({
                 'position': position,
+                'path': videos_info[video_id]["path"],
+                'type': 'video',
                 'video_id': video_id,
                 'title': videos_info[video_id]["title"]
-            }
+            })
         else:
-            # Video ID not in BigQuery - add placeholder
-            path_to_item_map[f"missing_{video_id}"] = {
-                'type': 'video',
+            # Video ID not in BigQuery - add placeholder with no path
+            items_to_verify.append({
                 'position': position,
+                'path': None,
+                'type': 'video',
                 'video_id': video_id,
                 'title': f'Video {video_id}',
                 'error': 'Video ID not found in BigQuery'
-            }
+            })
         position += 1
 
     # Add manual paths
     for manual_path in request.manual_paths:
-        all_paths.append(manual_path)
-        path_to_item_map[manual_path] = {
-            'type': 'transition',  # Assume transition (can be updated later)
-            'position': position
-        }
+        items_to_verify.append({
+            'position': position,
+            'path': manual_path,
+            'type': 'transition',
+            'title': 'Transition'
+        })
         position += 1
 
     # Add outro
     if outro_path:
-        all_paths.append(outro_path)
-        path_to_item_map[outro_path] = {'type': 'outro', 'position': position}
+        items_to_verify.append({
+            'position': position,
+            'path': outro_path,
+            'type': 'outro',
+            'title': 'Outro'
+        })
 
     # Step 3: Get video metadata for all paths (ffprobe = existence check + metadata)
+    # Collect unique paths to avoid redundant ffprobe calls
+    all_paths = [item['path'] for item in items_to_verify if item['path']]
+    unique_paths = list(set(all_paths))
+
     validation_logger.info("Step 3: Getting video info via ffprobe (existence + metadata)...")
-    validation_logger.info(f"  Processing {len(all_paths)} paths with {max_workers} workers")
+    validation_logger.info(f"  Total items: {len(items_to_verify)}, Unique paths: {len(unique_paths)}")
 
     # Normalize paths before passing to ffprobe
-    normalized_paths = normalize_paths(all_paths)
+    normalized_paths = normalize_paths(unique_paths)
 
     # Batch get video info - if ffprobe succeeds, file exists; if fails, file doesn't exist
     videos_info_batch = get_videos_info_batch(normalized_paths, max_workers=max_workers)
 
-    # Map back to original paths
+    # Map original paths to video info
     path_video_info = {}
-    for original, normalized in zip(all_paths, normalized_paths):
+    for original, normalized in zip(unique_paths, normalized_paths):
         path_video_info[original] = videos_info_batch.get(normalized)
 
-    # Count available (ffprobe succeeded) vs unavailable (ffprobe failed)
+    # Count available
     available_count = sum(1 for info in path_video_info.values() if info is not None)
-    validation_logger.info(f"  Available: {available_count}/{len(all_paths)}")
+    validation_logger.info(f"  Available: {available_count}/{len(unique_paths)}")
     validation_logger.info("")
 
-    # Step 6: Build items with verification results
+    # Step 4: Build items with verification results
     total_duration = 0.0
     missing_count = 0
 
-    # Rebuild items in position order
-    sorted_items = sorted(path_to_item_map.items(), key=lambda x: x[1]['position'])
+    for item_info in items_to_verify:
+        path = item_info.get('path')
 
-    for path, item_info in sorted_items:
-        # Handle missing video IDs
-        if path.startswith("missing_"):
+        # Handle items with no path (missing video IDs)
+        if not path:
             items.append(JobItem(
                 position=item_info['position'],
-                item_type='video',
-                video_id=item_info['video_id'],
-                title=item_info['title'],
+                item_type=item_info['type'],
+                video_id=item_info.get('video_id'),
+                title=item_info.get('title'),
                 path=None,
                 path_available=False,
-                logo_path=logo_path,
-                error=item_info['error']
+                logo_path=logo_path if item_info['type'] == 'video' else None,
+                error=item_info.get('error')
             ))
             missing_count += 1
             continue
@@ -499,6 +571,107 @@ def sanitize_filename(filename: str) -> str:
     filename = re.sub(r'[-\s]+', '_', filename)
 
     return filename.lower()
+
+
+@router.get("/")
+async def list_jobs(
+    status: Optional[str] = None,
+    user_id: Optional[str] = None,
+    limit: int = 50
+):
+    """
+    List jobs with optional filtering.
+
+    Args:
+        status: Filter by status. Use 'active' for queued+processing, or specific status
+        user_id: Filter by user ID (required for non-admin users)
+        limit: Maximum number of jobs to return (default 50)
+
+    Returns:
+        List of jobs matching the criteria
+    """
+    supabase = get_supabase_client()
+
+    try:
+        query = supabase.table('jobs').select('*')
+
+        # Filter by status
+        if status == 'active':
+            query = query.in_('status', ['queued', 'processing'])
+        elif status:
+            query = query.eq('status', status)
+
+        # Filter by user
+        if user_id:
+            query = query.eq('user_id', user_id)
+
+        # Order and limit
+        query = query.order('created_at', desc=True).limit(limit)
+
+        result = query.execute()
+        return result.data or []
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list jobs: {str(e)}")
+
+
+@router.get("/history")
+async def get_job_history(
+    user_id: Optional[str] = None,
+    channel_name: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20
+):
+    """
+    Get compilation history (completed, failed, cancelled jobs).
+
+    Args:
+        user_id: Filter by user ID (required for non-admin users)
+        channel_name: Filter by channel name
+        page: Page number (1-indexed)
+        page_size: Number of items per page (default 20, max 100)
+
+    Returns:
+        dict: { jobs: [...], total: int, page: int, page_size: int, total_pages: int }
+    """
+    supabase = get_supabase_client()
+    page_size = min(page_size, 100)  # Cap at 100
+    offset = (page - 1) * page_size
+
+    try:
+        # Build query for history (completed, failed, cancelled)
+        query = supabase.table('jobs').select(
+            'job_id, user_id, channel_name, status, enable_4k, '
+            'output_path, production_path, moved_to_production, '
+            'final_duration, error_message, created_at, completed_at',
+            count='exact'
+        ).in_('status', ['completed', 'failed', 'cancelled'])
+
+        # Filter by user
+        if user_id:
+            query = query.eq('user_id', user_id)
+
+        # Filter by channel
+        if channel_name:
+            query = query.eq('channel_name', channel_name)
+
+        # Order by completion date (most recent first) and paginate
+        query = query.order('completed_at', desc=True).range(offset, offset + page_size - 1)
+
+        result = query.execute()
+        total = result.count or 0
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 1
+
+        return {
+            'jobs': result.data or [],
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': total_pages
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get job history: {str(e)}")
 
 
 @router.get("/{job_id}")

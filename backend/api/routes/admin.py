@@ -1,5 +1,5 @@
-from fastapi import APIRouter
-from services.bigquery import clear_channels_cache, _channels_cache, CACHE_TTL, get_all_channels
+from fastapi import APIRouter, HTTPException
+from services.bigquery import clear_channels_cache, _channels_cache, CACHE_TTL, get_all_channels, get_all_channel_assets
 import time
 
 router = APIRouter()
@@ -58,4 +58,24 @@ async def get_channels_list():
     return {
         "channels": channels,
         "count": len(channels)
+    }
+
+@router.get("/channels/{channel_name}/logo")
+async def get_channel_logo(channel_name: str):
+    """
+    Get logo path for a specific channel.
+
+    Args:
+        channel_name: Name of the channel
+
+    Returns:
+        dict: Logo path for the channel
+    """
+    assets = get_all_channel_assets(channel_name)
+    if not assets or not assets.get('logo'):
+        raise HTTPException(status_code=404, detail=f"Logo not found for channel: {channel_name}")
+
+    return {
+        "channel_name": channel_name,
+        "logo_path": assets['logo']
     }
