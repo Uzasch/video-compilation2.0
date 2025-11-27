@@ -1,15 +1,41 @@
 # Task 7: Compilation Workflow Pages
 
 ## Objective
-Build the main compilation workflow: Dashboard with active jobs, New Compilation page with video ID input, sequence editor with per-video logos, and job submission.
+Build the main compilation workflow: Dashboard with active jobs and queue stats, New Compilation page with video ID input, sequence editor with per-video customization, and job submission.
+
+## Design Guidelines
+- Use **shadcn/ui** components throughout
+- Use **semantic theming** variables (bg-background, text-foreground, bg-card, text-muted-foreground, etc.)
+- Follow existing patterns from Layout.jsx and Login.jsx
+- Use backdrop-blur and subtle shadows for depth
+- Consistent animation with `animate-in fade-in` classes
+
+---
+
+## Required shadcn Components
+
+Install additional components if needed:
+```bash
+npx shadcn@latest add select progress textarea alert collapsible separator scroll-area
+```
 
 ---
 
 ## 1. Dashboard Page
 
-**File: `frontend/src/pages/Dashboard.jsx`**
+**File: `frontend/video-compilation2.0/src/pages/Dashboard.jsx`**
 
-```javascript
+### Functionality:
+- Fetch and display active jobs (queued + processing)
+- Show queue statistics with user's position
+- Poll for updates every 5 seconds
+- Admin sees all jobs, users see only their own
+
+### API Endpoints:
+- `GET /api/jobs?status=active` - fetch active jobs
+- `GET /api/jobs/queue/stats` - queue statistics
+
+```jsx
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -17,7 +43,11 @@ import { useAuth } from '../hooks/useAuth'
 import apiClient from '../services/api'
 import Layout from '../components/Layout'
 import JobCard from '../components/JobCard'
-import { Plus, Loader } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Plus, Loader2, Users, Clock, Activity } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -28,7 +58,6 @@ export default function Dashboard() {
   const { data: initialJobs, isLoading } = useQuery({
     queryKey: ['activeJobs', user?.id],
     queryFn: async () => {
-      // Use API client instead of direct Supabase query
       const params = { status: 'active' }
       if (user?.role !== 'admin') {
         params.user_id = user.id
@@ -46,146 +75,156 @@ export default function Dashboard() {
       const { data } = await apiClient.get('/jobs/queue/stats')
       return data
     },
-    refetchInterval: 5000,  // Update every 5 seconds
+    refetchInterval: 5000,
     enabled: !!user
   })
 
   useEffect(() => {
-    if (initialJobs) {
-      setJobs(initialJobs)
-    }
+    if (initialJobs) setJobs(initialJobs)
   }, [initialJobs])
 
-  // Polling for job updates (alternative to real-time subscriptions)
-  // For real-time updates, you can integrate Supabase Realtime separately
+  // Poll for job updates
   useEffect(() => {
     if (!user) return
-
-    // Poll for updates every 5 seconds
     const interval = setInterval(async () => {
       try {
         const params = { status: 'active' }
-        if (user?.role !== 'admin') {
-          params.user_id = user.id
-        }
+        if (user?.role !== 'admin') params.user_id = user.id
         const { data } = await apiClient.get('/jobs', { params })
         setJobs(data || [])
       } catch (error) {
         console.error('Failed to fetch jobs:', error)
       }
     }, 5000)
-
     return () => clearInterval(interval)
   }, [user])
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-8">
         {/* Header */}
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-sm text-gray-600 mt-1">
-              Active compilation jobs
+            <h2 className="text-3xl font-bold tracking-tight text-foreground">Dashboard</h2>
+            <p className="text-muted-foreground mt-1">
+              Monitor active jobs and queue status
             </p>
           </div>
-          <button
-            onClick={() => navigate('/new')}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium"
-          >
-            <Plus size={20} />
-            New Compilation
-          </button>
+          <Button onClick={() => navigate('/new')} className="shadow-lg hover:shadow-xl transition-all">
+            <Plus className="mr-2 h-4 w-4" /> New Compilation
+          </Button>
         </div>
 
-        {/* Queue Statistics Card */}
-        {queueStats && queueStats.user_jobs.length > 0 && (
-          <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg shadow p-6 border border-blue-200">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">Queue Status</h2>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <div className="flex items-center gap-1">
-                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                  <span>{queueStats.active_workers} workers active</span>
-                </div>
-                <span className="text-gray-400">•</span>
-                <span>{queueStats.total_in_queue} total in queue</span>
-              </div>
-            </div>
+        {/* Queue Statistics */}
+        {queueStats && (
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card className="bg-card/60 backdrop-blur-sm border-border/50">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Total in Queue</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-foreground">{queueStats.total_in_queue}</div>
+                <p className="text-xs text-muted-foreground">jobs waiting or processing</p>
+              </CardContent>
+            </Card>
 
-            <div className="space-y-3">
+            <Card className="bg-card/60 backdrop-blur-sm border-border/50">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Active Workers</CardTitle>
+                <Users className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-foreground">{queueStats.active_workers}</div>
+                <p className="text-xs text-muted-foreground">workers processing</p>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-card/60 backdrop-blur-sm border-border/50">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Available Slots</CardTitle>
+                <Activity className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-foreground">{queueStats.available_slots}</div>
+                <p className="text-xs text-muted-foreground">
+                  {queueStats.available_slots > 0 ? 'start immediately!' : 'jobs will queue'}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* User's Queue Position */}
+        {queueStats?.user_jobs?.length > 0 && (
+          <Card className="bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+            <CardHeader>
+              <CardTitle className="text-foreground">Your Jobs in Queue</CardTitle>
+              <CardDescription>Track your compilation progress</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
               {queueStats.user_jobs.map((userJob) => (
                 <div
                   key={userJob.job_id}
-                  className="flex items-center justify-between bg-white rounded-lg p-4 border border-gray-200"
+                  className="flex items-center justify-between p-4 rounded-lg bg-background/80 border border-border/50"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center w-10 h-10 rounded-full ${
-                      userJob.is_processing ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                  <div className="flex items-center gap-4">
+                    <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold ${
+                      userJob.is_processing
+                        ? 'bg-green-500/10 text-green-600'
+                        : 'bg-amber-500/10 text-amber-600'
                     }`}>
-                      <span className="font-bold text-lg">#{userJob.queue_position}</span>
+                      #{userJob.queue_position}
                     </div>
                     <div>
-                      <h3 className="font-medium text-gray-900">{userJob.channel_name}</h3>
-                      <p className="text-sm text-gray-600">
+                      <p className="font-medium text-foreground">{userJob.channel_name}</p>
+                      <p className="text-sm text-muted-foreground">
                         {userJob.is_processing ? (
                           <span className="flex items-center gap-1 text-green-600">
-                            <Loader size={14} className="animate-spin" />
-                            Processing now
+                            <Loader2 className="h-3 w-3 animate-spin" /> Processing now
                           </span>
                         ) : (
-                          <span className="text-amber-600">
-                            {userJob.waiting_count === 0 ? (
-                              'Next in queue'
-                            ) : (
-                              `${userJob.waiting_count} job${userJob.waiting_count > 1 ? 's' : ''} ahead`
-                            )}
-                          </span>
+                          `${userJob.waiting_count} job${userJob.waiting_count !== 1 ? 's' : ''} ahead`
                         )}
                       </p>
                     </div>
                   </div>
-                  <button
-                    onClick={() => navigate(`/compilation/${userJob.job_id}`)}
-                    className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    View Details →
-                  </button>
+                  <Button variant="ghost" size="sm" onClick={() => navigate(`/compilation/${userJob.job_id}`)}>
+                    View Details
+                  </Button>
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Active Jobs List */}
+        <div>
+          <h3 className="text-lg font-semibold text-foreground mb-4">Active Jobs</h3>
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-32 w-full rounded-lg" />
+              ))}
             </div>
-
-            {queueStats.available_slots > 0 && (
-              <div className="mt-4 p-3 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-sm text-green-700">
-                  ✓ {queueStats.available_slots} worker{queueStats.available_slots > 1 ? 's' : ''} available -
-                  your next job will start immediately!
-                </p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Active Jobs */}
-        {isLoading ? (
-          <div className="text-center py-12 text-gray-500">Loading jobs...</div>
-        ) : jobs.length === 0 ? (
-          <div className="text-center py-12">
-            <p className="text-gray-500 mb-4">No active jobs</p>
-            <button
-              onClick={() => navigate('/new')}
-              className="text-blue-600 hover:text-blue-700 font-medium"
-            >
-              Create your first compilation
-            </button>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {jobs.map((job) => (
-              <JobCard key={job.job_id} job={job} />
-            ))}
-          </div>
-        )}
+          ) : jobs.length === 0 ? (
+            <Card className="bg-card/60 backdrop-blur-sm border-border/50">
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <Activity className="h-12 w-12 text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground mb-4">No active jobs</p>
+                <Button variant="outline" onClick={() => navigate('/new')}>
+                  Create your first compilation
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {jobs.map((job) => (
+                <JobCard key={job.job_id} job={job} />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </Layout>
   )
@@ -196,124 +235,127 @@ export default function Dashboard() {
 
 ## 2. Job Card Component
 
-**File: `frontend/src/components/JobCard.jsx`**
+**File: `frontend/video-compilation2.0/src/components/JobCard.jsx`**
 
-```javascript
+### Functionality:
+- Display job status with color-coded badges
+- Progress bar for processing jobs
+- Show progress_message from backend
+- Clickable to view details
+
+```jsx
 import { useNavigate } from 'react-router-dom'
-import { Clock, User, Tv, CheckCircle, XCircle, Loader } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Clock, Loader2, CheckCircle, XCircle, Tv, Calendar } from 'lucide-react'
+
+const statusConfig = {
+  queued: { label: 'Queued', variant: 'secondary', icon: Clock },
+  processing: { label: 'Processing', variant: 'default', icon: Loader2 },
+  completed: { label: 'Completed', variant: 'success', icon: CheckCircle },
+  failed: { label: 'Failed', variant: 'destructive', icon: XCircle },
+  cancelled: { label: 'Cancelled', variant: 'outline', icon: XCircle }
+}
 
 export default function JobCard({ job }) {
   const navigate = useNavigate()
-
-  const statusColors = {
-    queued: 'bg-yellow-100 text-yellow-800',
-    processing: 'bg-blue-100 text-blue-800',
-    completed: 'bg-green-100 text-green-800',
-    failed: 'bg-red-100 text-red-800',
-    cancelled: 'bg-gray-100 text-gray-800'
-  }
-
-  const StatusIcon = {
-    queued: Clock,
-    processing: Loader,
-    completed: CheckCircle,
-    failed: XCircle,
-    cancelled: XCircle
-  }[job.status]
+  const config = statusConfig[job.status] || statusConfig.queued
+  const StatusIcon = config.icon
 
   return (
-    <div
+    <Card
+      className="bg-card/60 backdrop-blur-sm border-border/50 hover:shadow-lg transition-all cursor-pointer group"
       onClick={() => navigate(`/compilation/${job.job_id}`)}
-      className="bg-white rounded-lg shadow p-6 hover:shadow-md transition-shadow cursor-pointer"
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
-          <div className="flex items-center gap-3 mb-2">
-            <h3 className="text-lg font-semibold text-gray-900">
-              {job.channel_name}
-            </h3>
-            <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[job.status]}`}>
+      <CardContent className="p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-2">
+              <h3 className="text-lg font-semibold text-foreground group-hover:text-primary transition-colors">
+                {job.channel_name}
+              </h3>
+              <Badge variant={config.variant} className="flex items-center gap-1">
+                <StatusIcon className={`h-3 w-3 ${job.status === 'processing' ? 'animate-spin' : ''}`} />
+                {config.label}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
-                <StatusIcon size={14} className={job.status === 'processing' ? 'animate-spin' : ''} />
-                {job.status}
+                <Tv className="h-4 w-4" />
+                {job.enable_4k ? '4K' : 'HD'}
               </span>
-            </span>
+              <span className="flex items-center gap-1">
+                <Calendar className="h-4 w-4" />
+                {new Date(job.created_at).toLocaleDateString()}
+              </span>
+            </div>
           </div>
 
-          <div className="flex items-center gap-4 text-sm text-gray-600">
-            <span className="flex items-center gap-1">
-              <User size={16} />
-              {job.user_id}
-            </span>
-            <span className="flex items-center gap-1">
-              <Tv size={16} />
-              {job.enable_4k ? '4K' : 'HD'}
-            </span>
-            <span className="flex items-center gap-1">
-              <Clock size={16} />
-              {new Date(job.created_at).toLocaleString()}
-            </span>
-          </div>
-        </div>
-
-        <div className="text-right">
           {job.status === 'processing' && (
-            <div className="text-2xl font-bold text-blue-600">
-              {job.progress}%
+            <div className="text-right">
+              <span className="text-3xl font-bold text-primary">{job.progress}%</span>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Progress bar for processing jobs */}
-      {job.status === 'processing' && (
-        <div className="mt-4 space-y-2">
-          <div className="w-full bg-gray-200 rounded-full h-2">
-            <div
-              className="bg-blue-600 h-2 rounded-full transition-all duration-500"
-              style={{ width: `${job.progress}%` }}
-            />
-          </div>
-
-          {/* Progress message and percentage */}
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">
+        {/* Progress bar for processing jobs */}
+        {job.status === 'processing' && (
+          <div className="space-y-2">
+            <Progress value={job.progress} className="h-2" />
+            <p className="text-sm text-muted-foreground">
               {job.progress_message || 'Processing...'}
-            </span>
-            <span className="font-semibold text-blue-600">
-              {job.progress}%
-            </span>
+            </p>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Error message */}
-      {job.status === 'failed' && job.error_message && (
-        <div className="mt-3 text-sm text-red-600">
-          Error: {job.error_message}
-        </div>
-      )}
-    </div>
+        {/* Error message */}
+        {job.status === 'failed' && job.error_message && (
+          <div className="mt-3 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
+            <p className="text-sm text-destructive">{job.error_message}</p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 ```
 
 ---
 
-## 3. New Compilation Page (Main Form)
+## 3. New Compilation Page
 
-**File: `frontend/src/pages/NewCompilation.jsx`**
+**File: `frontend/video-compilation2.0/src/pages/NewCompilation.jsx`**
 
-```javascript
+### Functionality:
+- Step 1: Select channel and enter video IDs
+- Verify button calls `/api/jobs/verify` (builds sequence AND verifies paths)
+- Step 2: Edit sequence, customize per-video settings
+- Submit button calls `/api/jobs/submit`
+
+### API Endpoints:
+- `GET /api/admin/channels` - list channels
+- `POST /api/jobs/verify` - verify video IDs and build sequence
+- `POST /api/jobs/submit` - submit job
+
+```jsx
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { useAuth } from '../hooks/useAuth'
 import apiClient from '../services/api'
 import Layout from '../components/Layout'
 import VideoIdInput from '../components/VideoIdInput'
 import SequenceEditor from '../components/SequenceEditor'
-import { AlertCircle } from 'lucide-react'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Separator } from '@/components/ui/separator'
+import { ArrowLeft, ArrowRight, Loader2, AlertCircle, CheckCircle, Clock, Film } from 'lucide-react'
 
 export default function NewCompilation() {
   const { user } = useAuth()
@@ -325,240 +367,256 @@ export default function NewCompilation() {
   const [enable4k, setEnable4k] = useState(false)
   const [pathsVerified, setPathsVerified] = useState(false)
 
-  // Fetch channels from BigQuery
-  const { data: channels } = useQuery({
+  // Fetch channels
+  const { data: channels, isLoading: channelsLoading } = useQuery({
     queryKey: ['channels'],
     queryFn: async () => {
       const { data } = await apiClient.get('/admin/channels')
-      return data.channels  // Extract channels array from response
+      return data.channels
     }
   })
 
-  // Verify and build sequence from video IDs (single step - backend does path verification)
+  // Verify mutation
   const verifyMutation = useMutation({
     mutationFn: async ({ channel, videoIds, manualPaths = [] }) => {
       const { data } = await apiClient.post('/jobs/verify', {
         channel_name: channel,
         video_ids: videoIds.split('\n').map(id => id.trim()).filter(Boolean),
-        manual_paths: manualPaths  // For manually added paths
+        manual_paths: manualPaths
       })
       return data
     },
     onSuccess: (data) => {
       setSequence(data)
-      // Check if all paths are available
       const allAvailable = data.items.every(item => item.path_available)
       setPathsVerified(allAvailable)
 
       if (!allAvailable) {
         const missingCount = data.items.filter(item => !item.path_available).length
-        alert(`${missingCount} item(s) have unavailable paths. Please fix or delete them.`)
+        toast.warning(`${missingCount} item(s) have unavailable paths`)
+      } else {
+        toast.success('All paths verified successfully!')
       }
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.detail || 'Verification failed')
     }
   })
 
-  // Step 3: Submit job
+  // Submit mutation
   const submitMutation = useMutation({
     mutationFn: async (jobData) => {
       const { data } = await apiClient.post('/jobs/submit', jobData)
       return data
     },
     onSuccess: (data) => {
+      toast.success('Job submitted successfully!')
       navigate(`/compilation/${data.job_id}`)
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.detail || 'Submission failed')
     }
   })
 
   const handleVerify = () => {
     if (!channel || !videoIds.trim()) {
-      alert('Please select a channel and enter video IDs')
+      toast.error('Please select a channel and enter video IDs')
       return
     }
     verifyMutation.mutate({ channel, videoIds })
   }
 
-  // Re-verify after manual edits (e.g., fixing paths)
   const handleReverify = () => {
     if (!sequence) return
-    // Collect any manually edited paths
     const manualPaths = sequence.items
       .filter(item => item.item_type === 'transition' || item.item_type === 'image')
       .filter(item => item.path)
       .map(item => item.path)
-
-    verifyMutation.mutate({
-      channel,
-      videoIds,  // Re-verify with original video IDs
-      manualPaths
-    })
+    verifyMutation.mutate({ channel, videoIds, manualPaths })
   }
 
   const handleSubmit = () => {
     if (!sequence || !pathsVerified) {
-      alert('Please verify all paths are available before submitting')
+      toast.error('Please verify all paths before submitting')
       return
     }
-
-    const jobData = {
+    submitMutation.mutate({
       user_id: user.id,
       channel_name: channel,
       enable_4k: enable4k,
       items: sequence.items
-    }
-
-    submitMutation.mutate(jobData)
+    })
   }
 
   return (
     <Layout>
-      <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-2xl font-bold text-gray-900">New Compilation</h1>
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header */}
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight text-foreground">New Compilation</h2>
+          <p className="text-muted-foreground mt-1">
+            {!sequence ? 'Step 1: Enter video IDs to build your sequence' : 'Step 2: Review and submit'}
+          </p>
+        </div>
 
-        {/* Step 1: Channel & Video IDs */}
+        {/* Step 1: Input */}
         {!sequence && (
-          <div className="bg-white rounded-lg shadow p-6 space-y-6">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Step 1: Select Channel & Enter Video IDs
-              </h2>
-
-              {/* Channel selection */}
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Channel
-                </label>
-                <select
-                  value={channel}
-                  onChange={(e) => setChannel(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">Select a channel...</option>
-                  {channels?.map((ch) => (
-                    <option key={ch.name} value={ch.name}>
-                      {ch.name}
-                    </option>
-                  ))}
-                </select>
+          <Card className="bg-card/60 backdrop-blur-sm border-border/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Film className="h-5 w-5" />
+                Build Compilation
+              </CardTitle>
+              <CardDescription>
+                Select a channel and enter video IDs to fetch from the database
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Channel Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="channel">Channel</Label>
+                <Select value={channel} onValueChange={setChannel}>
+                  <SelectTrigger className="bg-background/50">
+                    <SelectValue placeholder="Select a channel..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {channels?.map((ch) => (
+                      <SelectItem key={ch} value={ch}>{ch}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
-              {/* Video IDs input */}
-              <VideoIdInput
-                value={videoIds}
-                onChange={setVideoIds}
-              />
+              {/* Video IDs */}
+              <VideoIdInput value={videoIds} onChange={setVideoIds} />
 
-              {/* 4K Option */}
-              <div className="mt-4">
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={enable4k}
-                    onChange={(e) => setEnable4k(e.target.checked)}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-700">
-                    Enable 4K Processing
-                  </span>
-                </label>
-              </div>
-            </div>
-
-            {/* Error */}
-            {verifyMutation.isError && (
-              <div className="flex items-start gap-2 p-4 bg-red-50 rounded-md">
-                <AlertCircle className="text-red-600 mt-0.5" size={20} />
-                <div className="text-sm text-red-700">
-                  {verifyMutation.error.response?.data?.detail || 'Verification failed'}
+              {/* 4K Toggle */}
+              <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border/50">
+                <div>
+                  <Label htmlFor="4k-switch" className="text-base font-medium">4K Processing</Label>
+                  <p className="text-sm text-muted-foreground">Enable higher quality output</p>
                 </div>
+                <Switch id="4k-switch" checked={enable4k} onCheckedChange={setEnable4k} />
               </div>
-            )}
 
-            {/* Verify button */}
-            <button
-              onClick={handleVerify}
-              disabled={verifyMutation.isPending}
-              className="w-full py-2 px-4 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50"
-            >
-              {verifyMutation.isPending ? 'Verifying...' : 'Verify & Build Sequence'}
-            </button>
-          </div>
+              {/* Error Alert */}
+              {verifyMutation.isError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    {verifyMutation.error?.response?.data?.detail || 'Verification failed'}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Verify Button */}
+              <Button
+                onClick={handleVerify}
+                disabled={verifyMutation.isPending || !channel || !videoIds.trim()}
+                className="w-full"
+                size="lg"
+              >
+                {verifyMutation.isPending ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Verifying...
+                  </>
+                ) : (
+                  <>
+                    Verify & Build Sequence
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
-        {/* Step 2: Edit Sequence */}
+        {/* Step 2: Sequence Editor */}
         {sequence && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Step 2: Review & Edit Sequence
-              </h2>
-              <button
-                onClick={() => setSequence(null)}
-                className="text-sm text-gray-600 hover:text-gray-900"
-              >
-                ← Back to Edit
-              </button>
-            </div>
+          <div className="space-y-6">
+            {/* Back Button */}
+            <Button variant="ghost" onClick={() => setSequence(null)}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Edit
+            </Button>
 
+            {/* Sequence Editor */}
             <SequenceEditor
               sequence={sequence}
               onChange={setSequence}
             />
 
-            {/* Summary & Submit */}
-            <div className="bg-white rounded-lg shadow p-6">
-              <div className="space-y-4">
-                {/* Summary */}
-                <div>
-                  <p className="text-sm text-gray-600">
-                    Total items: <span className="font-medium">{sequence.items.length}</span>
-                  </p>
-                  {sequence.total_duration && (
-                    <p className="text-sm text-gray-600">
-                      Estimated duration: <span className="font-medium">
-                        {Math.floor(sequence.total_duration / 60)}m {Math.floor(sequence.total_duration % 60)}s
-                      </span>
-                    </p>
-                  )}
-                  {!pathsVerified && (
-                    <p className="text-sm text-amber-600 mt-2">
-                      ⚠ Some paths are unavailable. Fix them and click "Re-verify" before submitting.
-                    </p>
-                  )}
-                  {pathsVerified && (
-                    <p className="text-sm text-green-600 mt-2">
-                      ✓ All paths verified and available!
-                    </p>
-                  )}
+            {/* Summary Card */}
+            <Card className="bg-card/60 backdrop-blur-sm border-border/50">
+              <CardHeader>
+                <CardTitle>Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Total items:</span>
+                    <span className="ml-2 font-medium text-foreground">{sequence.items.length}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Duration:</span>
+                    <span className="ml-2 font-medium text-foreground">
+                      {Math.floor(sequence.total_duration / 60)}m {Math.floor(sequence.total_duration % 60)}s
+                    </span>
+                  </div>
                 </div>
 
-                {/* Action buttons */}
+                <Separator />
+
+                {/* Status Alert */}
+                {!pathsVerified ? (
+                  <Alert variant="warning" className="border-amber-500/50 bg-amber-500/10">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-700">
+                      Some paths are unavailable. Fix them and re-verify before submitting.
+                    </AlertDescription>
+                  </Alert>
+                ) : (
+                  <Alert className="border-green-500/50 bg-green-500/10">
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-700">
+                      All paths verified and available!
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                {/* Action Buttons */}
                 <div className="flex gap-3">
                   {!pathsVerified && (
-                    <button
+                    <Button
+                      variant="outline"
                       onClick={handleReverify}
                       disabled={verifyMutation.isPending}
-                      className="flex-1 py-2 px-6 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium disabled:opacity-50"
+                      className="flex-1"
                     >
-                      {verifyMutation.isPending ? 'Re-verifying...' : 'Re-verify Paths'}
-                    </button>
+                      {verifyMutation.isPending ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Re-verify Paths
+                    </Button>
                   )}
-
-                  <button
+                  <Button
                     onClick={handleSubmit}
                     disabled={submitMutation.isPending || !pathsVerified}
-                    className="flex-1 py-2 px-6 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium disabled:opacity-50"
+                    className="flex-1"
                   >
-                    {submitMutation.isPending ? 'Submitting...' : 'Submit Compilation'}
-                  </button>
+                    {submitMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      'Submit Compilation'
+                    )}
+                  </Button>
                 </div>
-
-                {/* Help text */}
-                <p className="text-xs text-gray-500">
-                  {pathsVerified
-                    ? 'All files verified. Click "Submit Compilation" to queue the job.'
-                    : 'Fix unavailable paths by editing items, then click "Re-verify Paths".'}
-                </p>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>
@@ -571,24 +629,33 @@ export default function NewCompilation() {
 
 ## 4. Video ID Input Component
 
-**File: `frontend/src/components/VideoIdInput.jsx`**
+**File: `frontend/video-compilation2.0/src/components/VideoIdInput.jsx`**
 
-```javascript
+```jsx
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+
 export default function VideoIdInput({ value, onChange }) {
+  const lineCount = value.split('\n').filter(Boolean).length
+
   return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        Video IDs (one per line)
-      </label>
-      <textarea
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <Label htmlFor="video-ids">Video IDs</Label>
+        <span className="text-xs text-muted-foreground">
+          {lineCount} video{lineCount !== 1 ? 's' : ''}
+        </span>
+      </div>
+      <Textarea
+        id="video-ids"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Paste video IDs here, one per line...&#10;abc123&#10;def456&#10;ghi789"
         rows={10}
-        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+        className="font-mono text-sm bg-background/50"
       />
-      <p className="text-xs text-gray-500 mt-1">
-        Enter one video ID per line. Titles and paths will be fetched automatically.
+      <p className="text-xs text-muted-foreground">
+        Enter one video ID per line. Paths and metadata will be fetched automatically.
       </p>
     </div>
   )
@@ -599,16 +666,16 @@ export default function VideoIdInput({ value, onChange }) {
 
 ## 5. Sequence Editor Component
 
-**File: `frontend/src/components/SequenceEditor.jsx`**
+**File: `frontend/video-compilation2.0/src/components/SequenceEditor.jsx`**
 
-```javascript
-import { useState } from 'react'
+```jsx
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import SequenceItem from './SequenceItem'
 import InsertButton from './InsertButton'
+import { List } from 'lucide-react'
 
 export default function SequenceEditor({ sequence, onChange }) {
-  const [applyLogoToAll, setApplyLogoToAll] = useState(false)
-
   const updateItem = (position, updates) => {
     const updatedItems = sequence.items.map((item) =>
       item.position === position ? { ...item, ...updates } : item
@@ -618,93 +685,74 @@ export default function SequenceEditor({ sequence, onChange }) {
 
   const insertItem = (afterPosition, itemType) => {
     const items = [...sequence.items]
-    const insertIndex = items.findIndex(item => item.position === afterPosition)
-
-    // Shift positions of all items after insert point
     items.forEach(item => {
-      if (item.position > afterPosition) {
-        item.position++
-      }
+      if (item.position > afterPosition) item.position++
     })
 
-    // Insert new item
     const newItem = {
       position: afterPosition + 1,
       item_type: itemType,
       path: null,
-      path_available: false,  // Will be set to true after upload or path verification
+      path_available: false,
       logo_path: itemType === 'video' ? sequence.default_logo_path : null,
-      text_animation_text: null,  // Text string for letter-by-letter animation
-      duration: itemType === 'image' ? 5 : null,  // Default 5 seconds for images
+      text_animation_text: null,
+      duration: itemType === 'image' ? 5 : null,
       title: itemType === 'image' ? 'Image Slide' : null
     }
 
+    const insertIndex = items.findIndex(item => item.position === afterPosition)
     items.splice(insertIndex + 1, 0, newItem)
-
     onChange({ ...sequence, items })
   }
 
   const deleteItem = (position) => {
-    // Can't delete intro or outro
     const item = sequence.items.find(i => i.position === position)
-    if (item?.item_type === 'intro' || item?.item_type === 'outro') {
-      alert("Can't delete intro or outro")
-      return
-    }
+    if (item?.item_type === 'intro' || item?.item_type === 'outro') return
 
     let items = sequence.items.filter(i => i.position !== position)
-
-    // Reorder positions
-    items = items.map((item, index) => ({
-      ...item,
-      position: index + 1
-    }))
-
+    items = items.map((item, index) => ({ ...item, position: index + 1 }))
     onChange({ ...sequence, items })
   }
 
   const handleApplyLogoToAll = (logoPath) => {
-    const updatedItems = sequence.items.map((item) => {
-      // Only apply to videos, not intro/outro/transitions
-      if (item.item_type === 'video') {
-        return { ...item, logo_path: logoPath }
-      }
-      return item
-    })
+    const updatedItems = sequence.items.map((item) =>
+      item.item_type === 'video' ? { ...item, logo_path: logoPath } : item
+    )
     onChange({ ...sequence, items: updatedItems })
   }
 
   return (
-    <div className="bg-white rounded-lg shadow">
-      <div className="p-6 border-b border-gray-200">
-        <h3 className="text-lg font-semibold text-gray-900">Video Sequence</h3>
-        <p className="text-sm text-gray-600 mt-1">
-          Drag to reorder videos, add transitions, and customize per-video settings
-        </p>
-      </div>
-
-      <div className="p-6 space-y-2">
-        {sequence.items.map((item, index) => (
-          <div key={item.position}>
-            <SequenceItem
-              item={item}
-              onUpdate={updateItem}
-              onDelete={deleteItem}
-              onApplyLogoToAll={handleApplyLogoToAll}
-              defaultLogoPath={sequence.default_logo_path}
-            />
-
-            {/* Insert button (not after outro) */}
-            {item.item_type !== 'outro' && (
-              <InsertButton
-                afterPosition={item.position}
-                onInsert={insertItem}
-              />
-            )}
+    <Card className="bg-card/60 backdrop-blur-sm border-border/50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <List className="h-5 w-5" />
+          Video Sequence
+        </CardTitle>
+        <CardDescription>
+          Review items, customize logos and text animations, add transitions
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-[500px] pr-4">
+          <div className="space-y-2">
+            {sequence.items.map((item) => (
+              <div key={item.position}>
+                <SequenceItem
+                  item={item}
+                  onUpdate={updateItem}
+                  onDelete={deleteItem}
+                  onApplyLogoToAll={handleApplyLogoToAll}
+                  defaultLogoPath={sequence.default_logo_path}
+                />
+                {item.item_type !== 'outro' && (
+                  <InsertButton afterPosition={item.position} onInsert={insertItem} />
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
   )
 }
 ```
@@ -713,177 +761,147 @@ export default function SequenceEditor({ sequence, onChange }) {
 
 ## 6. Sequence Item Component
 
-**File: `frontend/src/components/SequenceItem.jsx`**
+**File: `frontend/video-compilation2.0/src/components/SequenceItem.jsx`**
 
-```javascript
+```jsx
 import { useState } from 'react'
-import { Film, Package, Play, Flag, Trash2, Image as ImageIcon, Type } from 'lucide-react'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import ImageUpload from './ImageUpload'
+import { Film, Package, Play, Flag, Trash2, Image, Type, ChevronDown, ChevronRight, Check, X, AlertTriangle } from 'lucide-react'
 
-const itemIcons = {
-  intro: Play,
-  video: Film,
-  transition: Package,
-  outro: Flag,
-  image: ImageIcon
-}
-
-const itemColors = {
-  intro: 'bg-green-100 text-green-800 border-green-300',
-  video: 'bg-blue-100 text-blue-800 border-blue-300',
-  transition: 'bg-purple-100 text-purple-800 border-purple-300',
-  outro: 'bg-red-100 text-red-800 border-red-300',
-  image: 'bg-pink-100 text-pink-800 border-pink-300'
+const itemConfig = {
+  intro: { icon: Play, color: 'bg-green-500/10 text-green-600 border-green-500/30' },
+  video: { icon: Film, color: 'bg-blue-500/10 text-blue-600 border-blue-500/30' },
+  transition: { icon: Package, color: 'bg-purple-500/10 text-purple-600 border-purple-500/30' },
+  outro: { icon: Flag, color: 'bg-red-500/10 text-red-600 border-red-500/30' },
+  image: { icon: Image, color: 'bg-pink-500/10 text-pink-600 border-pink-500/30' }
 }
 
 export default function SequenceItem({ item, onUpdate, onDelete, onApplyLogoToAll, defaultLogoPath }) {
-  const [expanded, setExpanded] = useState(false)
-  const Icon = itemIcons[item.item_type]
+  const [isOpen, setIsOpen] = useState(false)
+  const config = itemConfig[item.item_type]
+  const Icon = config.icon
 
-  const canDelete = item.item_type !== 'intro' && item.item_type !== 'outro'
+  const canDelete = !['intro', 'outro'].includes(item.item_type)
   const canHaveLogo = item.item_type === 'video'
   const canHaveTextAnimation = item.item_type === 'video'
   const isImage = item.item_type === 'image'
 
   return (
-    <div className={`border-2 rounded-lg ${itemColors[item.item_type]}`}>
-      {/* Main row */}
-      <div
-        className="p-4 cursor-pointer hover:bg-opacity-50"
-        onClick={() => setExpanded(!expanded)}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3 flex-1">
-            <Icon size={20} />
-            <div className="flex-1">
-              <div className="font-medium">
-                {item.title || item.item_type.toUpperCase()}
-              </div>
-              <div className="text-xs opacity-75">
-                Position: {item.position}
-                {isImage && item.duration && ` • ${item.duration}s`}
-                {item.video_id && ` • ${item.video_id}`}
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className={`rounded-lg border ${config.color} transition-all`}>
+        <CollapsibleTrigger asChild>
+          <div className="flex items-center justify-between p-4 cursor-pointer hover:bg-background/50">
+            <div className="flex items-center gap-3">
+              <Icon className="h-5 w-5" />
+              <div>
+                <p className="font-medium text-foreground">
+                  {item.title || item.item_type.charAt(0).toUpperCase() + item.item_type.slice(1)}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  #{item.position}
+                  {item.video_id && ` • ${item.video_id}`}
+                  {item.duration && ` • ${item.duration.toFixed(1)}s`}
+                </p>
               </div>
             </div>
-          </div>
 
-          <div className="flex items-center gap-2">
-            {/* Path status indicators */}
-            {item.path_available && (
-              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded flex items-center gap-1">
-                ✓ Available
-              </span>
-            )}
-            {!item.path_available && item.path && (
-              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded flex items-center gap-1">
-                ✗ Not Found
-              </span>
-            )}
-            {!item.path_available && !item.path && (
-              <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded flex items-center gap-1">
-                ⚠ Not Verified
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {/* Path status badge */}
+              {item.path_available ? (
+                <Badge variant="outline" className="bg-green-500/10 text-green-600 border-green-500/30">
+                  <Check className="h-3 w-3 mr-1" /> Available
+                </Badge>
+              ) : item.path ? (
+                <Badge variant="outline" className="bg-red-500/10 text-red-600 border-red-500/30">
+                  <X className="h-3 w-3 mr-1" /> Not Found
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30">
+                  <AlertTriangle className="h-3 w-3 mr-1" /> No Path
+                </Badge>
+              )}
 
-            {canDelete && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDelete(item.position)
-                }}
-                className="p-1 hover:bg-red-200 rounded"
-              >
-                <Trash2 size={16} />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
+              {canDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                  onClick={(e) => { e.stopPropagation(); onDelete(item.position) }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              )}
 
-      {/* Expanded details */}
-      {expanded && (
-        <div className="border-t border-current border-opacity-20 p-4 space-y-4 bg-white bg-opacity-50">
-
-          {/* Image upload (only for image type) */}
-          {isImage && (
-            <ImageUpload item={item} onUpdate={onUpdate} />
-          )}
-
-          {/* Path input (for non-image items) */}
-          {!isImage && (
-            <div>
-              <label className="block text-xs font-medium mb-1">Manual Path</label>
-              <input
-                type="text"
-                value={item.path || ''}
-                onChange={(e) => onUpdate(item.position, { path: e.target.value, path_available: false })}
-                placeholder="\\SERVER\path\to\video.mp4"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-              />
-              <p className="text-xs text-gray-500 mt-1">Path will be verified when you click "Verify & Process"</p>
+              {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
             </div>
-          )}
+          </div>
+        </CollapsibleTrigger>
 
-          {/* Logo path (only for videos) */}
-          {canHaveLogo && (
-            <div>
-              <label className="block text-xs font-medium mb-1 flex items-center gap-1">
-                <ImageIcon size={14} />
-                Logo Path
-              </label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={item.logo_path || ''}
-                  onChange={(e) => onUpdate(item.position, { logo_path: e.target.value })}
-                  placeholder="\\SERVER\path\to\logo.png"
-                  className="flex-1 px-2 py-1 text-sm border border-gray-300 rounded"
+        <CollapsibleContent>
+          <div className="px-4 pb-4 pt-2 space-y-4 border-t border-border/50">
+            {/* Image upload for image type */}
+            {isImage && <ImageUpload item={item} onUpdate={onUpdate} />}
+
+            {/* Manual path input */}
+            {!isImage && (
+              <div className="space-y-2">
+                <Label>Manual Path</Label>
+                <Input
+                  value={item.path || ''}
+                  onChange={(e) => onUpdate(item.position, { path: e.target.value, path_available: false })}
+                  placeholder="\\SERVER\path\to\video.mp4"
+                  className="font-mono text-sm bg-background/50"
                 />
-                <button
-                  onClick={() => onUpdate(item.position, { logo_path: defaultLogoPath })}
-                  className="px-3 py-1 text-xs bg-gray-200 hover:bg-gray-300 rounded"
-                >
-                  Reset
-                </button>
-                <button
-                  onClick={() => onApplyLogoToAll(item.logo_path)}
-                  className="px-3 py-1 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded"
-                >
-                  Apply to All Videos
-                </button>
               </div>
-            </div>
-          )}
+            )}
 
-          {/* Text animation (only for videos) */}
-          {canHaveTextAnimation && (
-            <div>
-              <label className="block text-xs font-medium mb-1 flex items-center gap-1">
-                <Type size={14} />
-                Text Animation
-              </label>
-              <input
-                type="text"
-                value={item.text_animation_text || ''}
-                onChange={(e) => onUpdate(item.position, { text_animation_text: e.target.value || null })}
-                placeholder="Text to animate letter-by-letter"
-                className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-              />
-              <p className="text-xs text-gray-600 mt-1">
-                Leave empty to disable text animation for this video
-              </p>
-            </div>
-          )}
+            {/* Logo path for videos */}
+            {canHaveLogo && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Image className="h-4 w-4" /> Logo Path
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    value={item.logo_path || ''}
+                    onChange={(e) => onUpdate(item.position, { logo_path: e.target.value })}
+                    placeholder="\\SERVER\path\to\logo.png"
+                    className="font-mono text-sm bg-background/50"
+                  />
+                  <Button variant="outline" size="sm" onClick={() => onUpdate(item.position, { logo_path: defaultLogoPath })}>
+                    Reset
+                  </Button>
+                  <Button variant="secondary" size="sm" onClick={() => onApplyLogoToAll(item.logo_path)}>
+                    Apply All
+                  </Button>
+                </div>
+              </div>
+            )}
 
-          {/* Duration display */}
-          {item.duration && (
-            <div className="text-xs text-gray-600">
-              Duration: {item.duration.toFixed(1)}s
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            {/* Text animation for videos */}
+            {canHaveTextAnimation && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Type className="h-4 w-4" /> Text Animation
+                </Label>
+                <Input
+                  value={item.text_animation_text || ''}
+                  onChange={(e) => onUpdate(item.position, { text_animation_text: e.target.value || null })}
+                  placeholder="Text to animate letter-by-letter"
+                  className="bg-background/50"
+                />
+                <p className="text-xs text-muted-foreground">Leave empty to disable</p>
+              </div>
+            )}
+          </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   )
 }
 ```
@@ -892,37 +910,46 @@ export default function SequenceItem({ item, onUpdate, onDelete, onApplyLogoToAl
 
 ## 7. Insert Button Component
 
-**File: `frontend/src/components/InsertButton.jsx`**
+**File: `frontend/video-compilation2.0/src/components/InsertButton.jsx`**
 
-```javascript
-import { Plus } from 'lucide-react'
+```jsx
+import { Button } from '@/components/ui/button'
+import { Plus, Film, Package, Image } from 'lucide-react'
 
 export default function InsertButton({ afterPosition, onInsert }) {
   return (
-    <div className="flex items-center justify-center py-2">
-      <div className="flex gap-2">
-        <button
+    <div className="flex items-center justify-center py-2 gap-2 opacity-50 hover:opacity-100 transition-opacity">
+      <div className="h-[1px] flex-1 bg-border" />
+      <div className="flex gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
           onClick={() => onInsert(afterPosition, 'video')}
-          className="px-3 py-1 text-xs bg-blue-100 text-blue-700 hover:bg-blue-200 rounded-md flex items-center gap-1"
         >
-          <Plus size={14} />
-          Video
-        </button>
-        <button
+          <Plus className="h-3 w-3 mr-1" />
+          <Film className="h-3 w-3" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
           onClick={() => onInsert(afterPosition, 'transition')}
-          className="px-3 py-1 text-xs bg-purple-100 text-purple-700 hover:bg-purple-200 rounded-md flex items-center gap-1"
         >
-          <Plus size={14} />
-          Transition
-        </button>
-        <button
+          <Plus className="h-3 w-3 mr-1" />
+          <Package className="h-3 w-3" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs"
           onClick={() => onInsert(afterPosition, 'image')}
-          className="px-3 py-1 text-xs bg-pink-100 text-pink-700 hover:bg-pink-200 rounded-md flex items-center gap-1"
         >
-          <Plus size={14} />
-          Image
-        </button>
+          <Plus className="h-3 w-3 mr-1" />
+          <Image className="h-3 w-3" />
+        </Button>
       </div>
+      <div className="h-[1px] flex-1 bg-border" />
     </div>
   )
 }
@@ -932,12 +959,15 @@ export default function InsertButton({ afterPosition, onInsert }) {
 
 ## 8. Image Upload Component
 
-**File: `frontend/src/components/ImageUpload.jsx`**
+**File: `frontend/video-compilation2.0/src/components/ImageUpload.jsx`**
 
-```javascript
+```jsx
 import { useState } from 'react'
-import { Upload, X, Loader } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import apiClient from '../services/api'
+import { Upload, X, Loader2 } from 'lucide-react'
 
 export default function ImageUpload({ item, onUpdate }) {
   const [uploading, setUploading] = useState(false)
@@ -947,40 +977,30 @@ export default function ImageUpload({ item, onUpdate }) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    // Validate file type
     if (!file.type.startsWith('image/')) {
       alert('Please select an image file')
       return
     }
 
-    // Validate file size (10MB)
     if (file.size > 10 * 1024 * 1024) {
       alert('Image must be smaller than 10MB')
       return
     }
 
     setUploading(true)
-
     try {
-      // Create FormData
       const formData = new FormData()
       formData.append('file', file)
 
-      // Upload to backend
       const { data } = await apiClient.post('/uploads/image', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        }
+        headers: { 'Content-Type': 'multipart/form-data' }
       })
 
-      // Update item with uploaded path
       onUpdate(item.position, {
         path: data.path,
-        path_available: true,  // File just uploaded, so it's available
+        path_available: true,
         title: item.title || file.name
       })
-
-      // Set preview
       setPreview(URL.createObjectURL(file))
     } catch (error) {
       alert('Upload failed: ' + (error.response?.data?.detail || error.message))
@@ -991,18 +1011,10 @@ export default function ImageUpload({ item, onUpdate }) {
 
   const handleRemove = async () => {
     if (!item.path) return
-
     try {
-      // Extract filename from path
       const filename = item.path.split(/[/\\]/).pop()
       await apiClient.delete(`/uploads/image/${filename}`)
-
-      // Clear from item
-      onUpdate(item.position, {
-        path: null,
-        path_available: false
-      })
-
+      onUpdate(item.position, { path: null, path_available: false })
       setPreview(null)
     } catch (error) {
       console.error('Delete failed:', error)
@@ -1010,76 +1022,58 @@ export default function ImageUpload({ item, onUpdate }) {
   }
 
   return (
-    <div className="space-y-2">
-      <label className="block text-xs font-medium mb-1">
-        Upload Image
-      </label>
-
+    <div className="space-y-4">
+      {/* Upload Area */}
       {preview ? (
         <div className="relative">
-          <img
-            src={preview}
-            alt="Preview"
-            className="w-full h-32 object-cover rounded border border-gray-300"
-          />
-          <button
+          <img src={preview} alt="Preview" className="w-full h-32 object-cover rounded-lg border border-border" />
+          <Button
+            variant="destructive"
+            size="icon"
+            className="absolute top-2 right-2 h-8 w-8"
             onClick={handleRemove}
-            className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
           >
-            <X size={16} />
-          </button>
+            <X className="h-4 w-4" />
+          </Button>
         </div>
       ) : (
-        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded cursor-pointer hover:bg-gray-50">
-          <div className="flex flex-col items-center justify-center pt-5 pb-6">
-            {uploading ? (
-              <Loader className="w-8 h-8 mb-2 text-gray-400 animate-spin" />
-            ) : (
-              <Upload className="w-8 h-8 mb-2 text-gray-400" />
-            )}
-            <p className="text-xs text-gray-500">
-              {uploading ? 'Uploading...' : 'Click to upload image'}
-            </p>
-            <p className="text-xs text-gray-400">PNG, JPG, GIF (max 10MB)</p>
-          </div>
-          <input
-            type="file"
-            className="hidden"
-            accept="image/*"
-            onChange={handleFileSelect}
-            disabled={uploading}
-          />
+        <label className="flex flex-col items-center justify-center h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all">
+          {uploading ? (
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          ) : (
+            <>
+              <Upload className="h-8 w-8 text-muted-foreground mb-2" />
+              <span className="text-sm text-muted-foreground">Click to upload</span>
+              <span className="text-xs text-muted-foreground">PNG, JPG, GIF (max 10MB)</span>
+            </>
+          )}
+          <input type="file" className="hidden" accept="image/*" onChange={handleFileSelect} disabled={uploading} />
         </label>
       )}
 
-      {/* Duration input */}
-      <div>
-        <label className="block text-xs font-medium mb-1">
-          Display Duration (seconds)
-        </label>
-        <input
-          type="number"
-          min="0.5"
-          max="60"
-          step="0.5"
-          value={item.duration || 5}
-          onChange={(e) => onUpdate(item.position, { duration: parseFloat(e.target.value) })}
-          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-        />
-      </div>
-
-      {/* Title input */}
-      <div>
-        <label className="block text-xs font-medium mb-1">
-          Title (optional)
-        </label>
-        <input
-          type="text"
-          value={item.title || ''}
-          onChange={(e) => onUpdate(item.position, { title: e.target.value })}
-          placeholder="Image slide title"
-          className="w-full px-2 py-1 text-sm border border-gray-300 rounded"
-        />
+      {/* Duration & Title */}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label>Duration (seconds)</Label>
+          <Input
+            type="number"
+            min="0.5"
+            max="60"
+            step="0.5"
+            value={item.duration || 5}
+            onChange={(e) => onUpdate(item.position, { duration: parseFloat(e.target.value) })}
+            className="bg-background/50"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Title</Label>
+          <Input
+            value={item.title || ''}
+            onChange={(e) => onUpdate(item.position, { title: e.target.value })}
+            placeholder="Image title"
+            className="bg-background/50"
+          />
+        </div>
       </div>
     </div>
   )
@@ -1090,34 +1084,20 @@ export default function ImageUpload({ item, onUpdate }) {
 
 ## Checklist
 
-- [ ] Dashboard page with active jobs list
-- [ ] Queue statistics card showing user's position in queue
-- [ ] Queue stats update every 5 seconds (polling)
-- [ ] Display processing vs waiting status for each job
-- [ ] JobCard component with progress bar
-- [ ] JobCard displays progress_message alongside percentage
-- [ ] Jobs polling for updates (every 5 seconds)
-- [ ] New Compilation page with channel selection
-- [ ] Channel list from `/api/admin/channels`
-- [ ] Video ID input component
-- [ ] Verify button calls `/api/jobs/verify` (single step - builds sequence AND verifies paths)
-- [ ] Sequence editor with all items in order
-- [ ] SequenceItem component with expandable details
-- [ ] SequenceItem shows path_available badges (✓ Available, ✗ Not Found)
-- [ ] Per-video logo input with "Apply to All" button
-- [ ] Per-video text_animation_text input (string, not array)
-- [ ] Insert buttons for adding videos/transitions/images
-- [ ] ImageUpload component with preview (uses `/api/uploads/image`)
-- [ ] Image duration and title inputs
-- [ ] Delete functionality (except intro/outro)
-- [ ] Manual path input for transitions/images
-- [ ] "Re-verify" button to re-check paths after manual edits
-- [ ] Show warning if any paths unavailable
-- [ ] Disable submit button until all paths verified
-- [ ] Submit button calls `/api/jobs/submit` (only if all path_available=true)
-- [ ] Test full workflow: video IDs → verify → edit sequence → submit
-- [ ] Test image upload and insertion in sequence
-- [ ] Test fixing unavailable paths with re-verify
+- [ ] Install additional shadcn components: `select`, `progress`, `textarea`, `alert`, `collapsible`, `separator`, `scroll-area`, `switch`
+- [ ] Dashboard with active jobs and queue statistics
+- [ ] Queue stats polling every 5 seconds
+- [ ] JobCard with progress bar and status badges
+- [ ] NewCompilation with channel select and video ID input
+- [ ] Single-step verify via `/api/jobs/verify`
+- [ ] SequenceEditor with collapsible items
+- [ ] SequenceItem with path status badges
+- [ ] Per-video logo_path input with "Apply All"
+- [ ] Per-video text_animation_text input
+- [ ] InsertButton for adding videos/transitions/images
+- [ ] ImageUpload with preview and duration
+- [ ] Re-verify button for path fixes
+- [ ] Submit only when all paths verified
 
 ---
 
