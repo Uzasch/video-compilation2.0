@@ -693,6 +693,83 @@ async def get_job_status(job_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
 
 
+@router.get("/{job_id}/items")
+async def get_job_items(job_id: str):
+    """
+    Get all items for a job, ordered by position.
+
+    Returns:
+        List of job items with all fields
+    """
+    supabase = get_supabase_client()
+
+    try:
+        # First verify job exists
+        job_result = supabase.table("jobs").select("job_id").eq("job_id", job_id).execute()
+        if not job_result.data:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        # Get items ordered by position
+        result = supabase.table("job_items")\
+            .select("*")\
+            .eq("job_id", job_id)\
+            .order("position")\
+            .execute()
+
+        return result.data or []
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get job items: {str(e)}")
+
+
+@router.post("/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """
+    Cancel a queued job.
+
+    Only jobs with status 'queued' can be cancelled.
+    Processing jobs cannot be cancelled (would need to implement Celery task revocation).
+
+    Returns:
+        Success message with updated status
+    """
+    supabase = get_supabase_client()
+
+    try:
+        # Get job
+        result = supabase.table("jobs").select("*").eq("job_id", job_id).single().execute()
+        job = result.data
+
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+
+        if job['status'] != 'queued':
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel job with status '{job['status']}'. Only queued jobs can be cancelled."
+            )
+
+        # Update status to cancelled
+        supabase.table("jobs").update({
+            'status': 'cancelled',
+            'completed_at': datetime.utcnow().isoformat(),
+            'error_message': 'Cancelled by user'
+        }).eq("job_id", job_id).execute()
+
+        return {
+            'success': True,
+            'message': 'Job cancelled successfully',
+            'job_id': job_id
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cancel job: {str(e)}")
+
+
 @router.get("/queue/stats")
 async def get_queue_stats(user_id: str):
     """
