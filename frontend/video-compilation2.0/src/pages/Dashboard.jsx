@@ -27,8 +27,8 @@ export default function Dashboard() {
       value: '3',
       description: 'Currently processing',
       icon: Activity,
-      color: 'text-chart-5',
-      bg: 'bg-chart-5/10',
+      color: 'text-chart-3',
+      bg: 'bg-chart-3/10',
     },
   ]
 
@@ -44,7 +44,7 @@ export default function Dashboard() {
             </p>
           </div>
           <Link to="/new">
-            <Button className="shadow-lg hover:shadow-xl transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground">
+            <Button className="shadow-lg hover:shadow-xl transition-all duration-300">
               <Plus className="mr-2 h-4 w-4" /> New Compilation
             </Button>
           </Link>
@@ -53,7 +53,7 @@ export default function Dashboard() {
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-3">
           {stats.map((stat, index) => (
-            <Card key={index} className="bg-card/80 backdrop-blur-sm border-border/50 shadow-sm hover:shadow-md transition-all duration-300">
+            <Card key={index} className="bg-card/60 backdrop-blur-sm border-border/50 shadow-sm hover:shadow-md transition-all duration-300 border-none">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
                   {stat.title}
@@ -74,14 +74,14 @@ export default function Dashboard() {
 
         {/* Recent Activity Section */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-          <Card className="col-span-4 bg-card/80 backdrop-blur-sm border-border/50 shadow-sm hover:shadow-md transition-all duration-300">
+          <Card className="col-span-4 bg-card/60 backdrop-blur-sm border-border/50 shadow-sm hover:shadow-md transition-all duration-300 border-none">
             <CardHeader>
               <CardTitle className="text-foreground">Recent Activity</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {[1, 2, 3].map((i) => (
-                  <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border/50">
+                  <div key={i} className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border/50 hover:bg-background/80 transition-colors">
                     <div className="flex items-center gap-4">
                       <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
                         <FileVideo className="h-5 w-5 text-primary" />
@@ -98,7 +98,7 @@ export default function Dashboard() {
             </CardContent>
           </Card>
 
-          <Card className="col-span-3 bg-card/80 backdrop-blur-sm border-border/50 shadow-sm hover:shadow-md transition-all duration-300">
+          <Card className="col-span-3 bg-card/60 backdrop-blur-sm border-border/50 shadow-sm hover:shadow-md transition-all duration-300 border-none">
             <CardHeader>
               <CardTitle className="text-foreground">Quick Actions</CardTitle>
             </CardHeader>

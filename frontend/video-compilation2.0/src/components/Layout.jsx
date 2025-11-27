@@ -25,7 +25,7 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-white/70 dark:bg-black/70 backdrop-blur-xl shadow-sm">
+      <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/70 backdrop-blur-xl shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-8">
@@ -33,7 +33,7 @@ export default function Layout({ children }) {
                 <div className="bg-primary/10 p-2 rounded-lg group-hover:bg-primary/20 transition-colors">
                   <Video className="w-5 h-5 text-primary" />
                 </div>
-                <h1 className="text-xl font-bold bg-gradient-to-r from-gray-900 to-gray-600 bg-clip-text text-transparent dark:from-white dark:to-gray-400">
+                <h1 className="text-xl font-bold text-foreground">
                   YBH Compilation
                 </h1>
               </Link>
