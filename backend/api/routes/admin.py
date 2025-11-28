@@ -255,6 +255,8 @@ async def get_all_jobs(
     status: Optional[str] = None,
     channel_name: Optional[str] = None,
     user_id: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     page: int = 1,
     page_size: int = 20
 ):
@@ -265,6 +267,8 @@ async def get_all_jobs(
         status: Filter by status (queued, processing, completed, failed, cancelled)
         channel_name: Filter by channel
         user_id: Filter by user
+        date_from: Filter jobs created on or after this date (YYYY-MM-DD)
+        date_to: Filter jobs created on or before this date (YYYY-MM-DD)
         page: Page number (1-indexed)
         page_size: Items per page (max 100)
     """
@@ -289,6 +293,12 @@ async def get_all_jobs(
             query = query.eq('channel_name', channel_name)
         if user_id:
             query = query.eq('user_id', user_id)
+
+        # Filter by date range (using created_at)
+        if date_from:
+            query = query.gte('created_at', f"{date_from}T00:00:00")
+        if date_to:
+            query = query.lte('created_at', f"{date_to}T23:59:59")
 
         # Order and paginate
         query = query.order('created_at', desc=True).range(offset, offset + page_size - 1)

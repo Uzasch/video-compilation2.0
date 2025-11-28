@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { DateRangePicker } from '@/components/ui/date-range-picker'
 import { cn } from '@/lib/utils'
 import {
   Table,
@@ -63,11 +64,12 @@ export default function History() {
   const [page, setPage] = useState(1)
   const [channelFilter, setChannelFilter] = useState('all')
   const [channelOpen, setChannelOpen] = useState(false)
+  const [dateRange, setDateRange] = useState(undefined)
   const pageSize = 15
 
   // Fetch history
   const { data, isLoading } = useQuery({
-    queryKey: ['jobHistory', user?.id, page, channelFilter],
+    queryKey: ['jobHistory', user?.id, page, channelFilter, dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
     queryFn: async () => {
       const params = { page, page_size: pageSize }
       if (user?.role !== 'admin') {
@@ -75,6 +77,12 @@ export default function History() {
       }
       if (channelFilter && channelFilter !== 'all') {
         params.channel_name = channelFilter
+      }
+      if (dateRange?.from) {
+        params.date_from = dateRange.from.toISOString().split('T')[0]
+      }
+      if (dateRange?.to) {
+        params.date_to = dateRange.to.toISOString().split('T')[0]
       }
       const { data } = await apiClient.get('/jobs/history', { params })
       return data
@@ -96,6 +104,11 @@ export default function History() {
     setPage(1)
   }
 
+  const handleDateChange = (range) => {
+    setDateRange(range)
+    setPage(1)
+  }
+
   return (
     <Layout>
       <div className="space-y-6">
@@ -108,22 +121,31 @@ export default function History() {
             </p>
           </div>
 
-          {/* Channel Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">Channel:</span>
+          {/* Filters */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Date Range Filter */}
+            <DateRangePicker
+              date={dateRange}
+              onDateChange={handleDateChange}
+              className="w-64"
+              placeholder="Filter by date"
+              align="end"
+            />
+
+            {/* Channel Filter */}
             <Popover open={channelOpen} onOpenChange={setChannelOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   role="combobox"
                   aria-expanded={channelOpen}
-                  className="w-56 justify-between bg-background/50"
+                  className="w-48 justify-between bg-background/50"
                 >
                   {channelFilter === 'all' ? 'All channels' : channelFilter}
                   <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-56 p-0" align="end">
+              <PopoverContent className="w-48 p-0" align="end">
                 <Command>
                   <CommandInput placeholder="Search channels..." className="h-9" />
                   <CommandList>

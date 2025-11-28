@@ -648,6 +648,8 @@ async def list_jobs(
 async def get_job_history(
     user_id: Optional[str] = None,
     channel_name: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     page: int = 1,
     page_size: int = 20
 ):
@@ -657,6 +659,8 @@ async def get_job_history(
     Args:
         user_id: Filter by user ID (required for non-admin users)
         channel_name: Filter by channel name
+        date_from: Filter jobs completed on or after this date (YYYY-MM-DD)
+        date_to: Filter jobs completed on or before this date (YYYY-MM-DD)
         page: Page number (1-indexed)
         page_size: Number of items per page (default 20, max 100)
 
@@ -683,6 +687,12 @@ async def get_job_history(
         # Filter by channel
         if channel_name:
             query = query.eq('channel_name', channel_name)
+
+        # Filter by date range (using completed_at)
+        if date_from:
+            query = query.gte('completed_at', f"{date_from}T00:00:00")
+        if date_to:
+            query = query.lte('completed_at', f"{date_to}T23:59:59")
 
         # Order by completion date (most recent first) and paginate
         query = query.order('completed_at', desc=True).range(offset, offset + page_size - 1)

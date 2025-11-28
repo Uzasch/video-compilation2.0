@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '../hooks/useAuth'
-import { Video, ArrowRight, User } from 'lucide-react'
+import { Video, ArrowRight, User, Loader2 } from 'lucide-react'
 
 export default function Login() {
   const [username, setUsername] = useState('')
@@ -41,29 +41,39 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-background">
       {/* Background Elements */}
       <div className="absolute inset-0 z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/10 blur-[100px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-secondary/20 blur-[100px]" />
+        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-ring/10 blur-[120px]" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-ring/15 blur-[120px]" />
+        <div className="absolute top-[40%] right-[20%] w-[30%] h-[30%] rounded-full bg-secondary/10 blur-[100px]" />
       </div>
 
-      <Card className="w-full mx-auto max-w-md bg-card/40 backdrop-blur-xl border-border/50 shadow-2xl relative z-10 animate-in fade-in zoom-in duration-500 slide-in-from-bottom-4">
-        <CardHeader className="text-center space-y-2 pb-6">
-          <div className="mx-auto w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center mb-2 ring-1 ring-primary/20">
-            <Video className="w-6 h-6 text-primary" />
+      <Card className="w-full mx-auto max-w-md bg-card/60 backdrop-blur-xl border-border/50 shadow-2xl relative z-10 animate-in fade-in zoom-in duration-500 slide-in-from-bottom-4">
+        <CardHeader className="text-center space-y-4 pb-6">
+          {/* Logo */}
+          <div className="relative mx-auto">
+            <div className="absolute inset-0 w-16 h-16 rounded-2xl bg-ring/20 blur-xl" />
+            <div className="relative w-16 h-16 bg-gradient-to-br from-primary to-primary/80 rounded-2xl flex items-center justify-center shadow-lg">
+              <Video className="w-8 h-8 text-primary-foreground" />
+            </div>
           </div>
-          <CardTitle className="text-3xl font-bold tracking-tight text-foreground">
-            YBH Compilation
-          </CardTitle>
-          <CardDescription className="text-base text-muted-foreground">
-            Enter your username to access the dashboard
-          </CardDescription>
+
+          <div className="space-y-2">
+            <CardTitle className="text-3xl font-bold tracking-tight text-foreground">
+              YBH Compilation
+            </CardTitle>
+            <CardDescription className="text-base text-muted-foreground">
+              Video compilation management system
+            </CardDescription>
+          </div>
         </CardHeader>
 
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-6">
+        <CardContent className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-sm font-medium text-foreground">Username</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+              <Label htmlFor="username" className="text-sm font-medium text-foreground">
+                Username
+              </Label>
+              <div className="relative group">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground transition-colors group-focus-within:text-ring" />
                 <Input
                   id="username"
                   name="username"
@@ -73,7 +83,7 @@ export default function Login() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="Enter your username"
-                  className="pl-10 h-11 bg-background/50 border-input focus:ring-2 focus:ring-ring transition-all"
+                  className="pl-10 h-12 bg-background/80 border-input focus:ring-2 focus:ring-ring transition-all text-base"
                   autoFocus
                 />
               </div>
@@ -82,20 +92,35 @@ export default function Login() {
             <Button
               type="submit"
               disabled={loading}
-              className="w-full h-11 text-base font-medium shadow-lg hover:shadow-xl transition-all duration-300"
+              className="w-full h-12 text-base font-semibold shadow-lg hover:shadow-xl hover:scale-[1.01] active:scale-[0.99] transition-all duration-200"
             >
               {loading ? (
-                'Signing in...'
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Signing in...
+                </span>
               ) : (
                 <span className="flex items-center gap-2">
-                  Sign in <ArrowRight className="w-4 h-4" />
+                  Sign in
+                  <ArrowRight className="w-5 h-5" />
                 </span>
               )}
             </Button>
           </form>
 
-          <p className="mt-6 text-center text-sm text-muted-foreground">
-            Contact admin if you need access
+          <div className="relative">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-border/50" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card px-2 text-muted-foreground">
+                Internal Tool
+              </span>
+            </div>
+          </div>
+
+          <p className="text-center text-sm text-muted-foreground">
+            Contact admin if you need access credentials
           </p>
         </CardContent>
       </Card>

@@ -13,6 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command'
+import { DateRangePicker } from '@/components/ui/date-range-picker'
 import {
   Table,
   TableBody,
@@ -397,23 +398,31 @@ function JobHistoryTable({ channelsData }) {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('all')
   const [channelFilter, setChannelFilter] = useState('all')
+  const [dateRange, setDateRange] = useState(undefined)
   const [statusOpen, setStatusOpen] = useState(false)
   const [channelOpen, setChannelOpen] = useState(false)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['adminJobs', page, statusFilter, channelFilter],
+    queryKey: ['adminJobs', page, statusFilter, channelFilter, dateRange?.from?.toISOString(), dateRange?.to?.toISOString()],
     queryFn: async () => {
       const params = { page, page_size: 15 }
       if (statusFilter !== 'all') params.status = statusFilter
       if (channelFilter !== 'all') params.channel_name = channelFilter
+      if (dateRange?.from) params.date_from = dateRange.from.toISOString().split('T')[0]
+      if (dateRange?.to) params.date_to = dateRange.to.toISOString().split('T')[0]
       const { data } = await apiClient.get('/admin/jobs', { params })
       return data
     }
   })
 
+  const handleDateChange = (range) => {
+    setDateRange(range)
+    setPage(1)
+  }
+
   const jobs = data?.jobs || []
   const statuses = ['all', 'queued', 'processing', 'completed', 'failed', 'cancelled']
-  const channels = channelsData?.channels || []
+  const channels = channelsData || []
 
   return (
     <Card className="bg-card/60 backdrop-blur-sm border-border/50">
@@ -430,7 +439,16 @@ function JobHistoryTable({ channelsData }) {
           </div>
 
           {/* Filters */}
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {/* Date range filter */}
+            <DateRangePicker
+              date={dateRange}
+              onDateChange={handleDateChange}
+              className="w-56"
+              placeholder="Filter by date"
+              align="end"
+            />
+
             {/* Status filter */}
             <Popover open={statusOpen} onOpenChange={setStatusOpen}>
               <PopoverTrigger asChild>
@@ -650,7 +668,7 @@ export default function Admin() {
     queryKey: ['channels'],
     queryFn: async () => {
       const { data } = await apiClient.get('/admin/channels')
-      return data
+      return data.channels
     }
   })
 
