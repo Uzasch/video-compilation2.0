@@ -530,20 +530,27 @@ async def move_to_production(job_id: str, request: MoveToProductionRequest):
     job_logger.info(f"Production base path: {production_base_raw} -> {production_base}")
 
     # 3. Generate production filename
+    now = datetime.now()
     if request.custom_filename:
         base_name = sanitize_filename(request.custom_filename)
         job_logger.info(f"Using custom filename: {request.custom_filename} -> {base_name}")
     else:
-        # Auto-generate: channelname_2025-01-18_143022.mp4
-        timestamp = datetime.now().strftime('%Y-%m-%d_%H%M%S')
+        # Auto-generate: channelname_yyyy-mm-dd_hhmmss.mp4
+        timestamp = now.strftime('%Y-%m-%d_%H%M%S')
         base_name = sanitize_filename(f"{job['channel_name']}_{timestamp}")
         job_logger.info(f"Auto-generated filename: {base_name}")
 
     production_filename = f"{base_name}.mp4"
 
-    # 4. Define production path (from BigQuery)
-    production_dir = Path(production_base)
+    # 4. Define production path with year/month subdirectories
+    # Structure: {base_path}/{YYYY}/{mon}/filename.mp4
+    year = now.strftime('%Y')
+    month = now.strftime('%b').lower()  # 3-letter month: jan, feb, mar, etc.
+
+    production_dir = Path(production_base) / year / month
     production_path = production_dir / production_filename
+
+    job_logger.info(f"Year/Month subfolder: {year}/{month}")
 
     # 5. Copy from temp to production
     temp_path = Path(job['output_path'])
