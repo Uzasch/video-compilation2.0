@@ -76,45 +76,9 @@ function DateRangePicker({
           defaultMonth={date?.from}
           selected={date}
           onSelect={handleSelect}
-          numberOfMonths={2}
+          numberOfMonths={1}
+          className="rounded-lg border-0 shadow-sm"
         />
-        <div className="flex items-center justify-between gap-2 border-t border-border p-3">
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const today = new Date()
-                const weekAgo = new Date()
-                weekAgo.setDate(today.getDate() - 7)
-                handleSelect({ from: weekAgo, to: today })
-              }}
-            >
-              Last 7 days
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                const today = new Date()
-                const monthAgo = new Date()
-                monthAgo.setDate(today.getDate() - 30)
-                handleSelect({ from: monthAgo, to: today })
-              }}
-            >
-              Last 30 days
-            </Button>
-          </div>
-          {date?.from && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleClear}
-            >
-              Clear
-            </Button>
-          )}
-        </div>
       </PopoverContent>
     </Popover>
   )
