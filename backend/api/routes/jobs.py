@@ -458,6 +458,11 @@ async def submit_job(request: SubmitJobRequest):
 
         logger.info(f"Job {job_id} queued to {queue_name} (task_id: {task.id}, videos: {video_count}, 4k: {request.enable_4k}, text_animation: {has_text_animation})")
 
+        # Store the Celery task_id for potential revocation
+        supabase.table('jobs').update({
+            'task_id': task.id
+        }).eq('job_id', job_id).execute()
+
         return SubmitJobResponse(
             job_id=job_id,
             status='queued'
@@ -766,10 +771,10 @@ async def get_job_items(job_id: str):
 @router.post("/{job_id}/cancel")
 async def cancel_job(job_id: str):
     """
-    Cancel a queued job.
+    Cancel a queued or processing job.
 
-    Only jobs with status 'queued' can be cancelled.
-    Processing jobs cannot be cancelled (would need to implement Celery task revocation).
+    For queued jobs: Simply updates status to cancelled.
+    For processing jobs: Revokes the Celery task and terminates the FFmpeg process.
 
     Returns:
         Success message with updated status
@@ -784,11 +789,22 @@ async def cancel_job(job_id: str):
         if not job:
             raise HTTPException(status_code=404, detail="Job not found")
 
-        if job['status'] != 'queued':
+        if job['status'] not in ['queued', 'processing']:
             raise HTTPException(
                 status_code=400,
-                detail=f"Cannot cancel job with status '{job['status']}'. Only queued jobs can be cancelled."
+                detail=f"Cannot cancel job with status '{job['status']}'. Only queued or processing jobs can be cancelled."
             )
+
+        # If processing, revoke the Celery task
+        task_revoked = False
+        if job['status'] == 'processing' and job.get('task_id'):
+            try:
+                # Revoke with terminate=True to kill the running process (FFmpeg)
+                celery_app.control.revoke(job['task_id'], terminate=True, signal='SIGTERM')
+                task_revoked = True
+                logger.info(f"Revoked Celery task {job['task_id']} for job {job_id}")
+            except Exception as e:
+                logger.warning(f"Failed to revoke task {job['task_id']}: {e}")
 
         # Update status to cancelled
         supabase.table("jobs").update({
@@ -797,10 +813,22 @@ async def cancel_job(job_id: str):
             'error_message': 'Cancelled by user'
         }).eq("job_id", job_id).execute()
 
+        # Clean up temp directory if exists
+        from services.storage import cleanup_temp_dir
+        try:
+            cleanup_temp_dir(job_id)
+        except Exception as e:
+            logger.warning(f"Failed to cleanup temp dir for {job_id}: {e}")
+
+        message = 'Job cancelled successfully'
+        if task_revoked:
+            message = 'Job cancelled and worker task terminated'
+
         return {
             'success': True,
-            'message': 'Job cancelled successfully',
-            'job_id': job_id
+            'message': message,
+            'job_id': job_id,
+            'task_revoked': task_revoked
         }
 
     except HTTPException:
