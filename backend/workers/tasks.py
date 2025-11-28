@@ -189,6 +189,7 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         # Update job status
         supabase.table('jobs').update({
             'status': 'processing',
+            'progress_message': 'Starting...',
             'started_at': datetime.utcnow().isoformat(),
             'worker_id': task.request.hostname,
             'queue_name': task.request.delivery_info.get('routing_key', 'unknown')
@@ -270,6 +271,10 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
         # Step 1c: Copy all files in parallel (5x faster than sequential)
         logger.info(f"Step 1c: Copying {len(files_to_copy)} files in parallel (items + logos)")
+        supabase.table('jobs').update({
+            'progress_message': f'Copying {len(files_to_copy)} files...'
+        }).eq('job_id', job_id).execute()
+
         settings = get_settings()
         dest_dir = str(Path(settings.temp_dir) / job_id)
 
@@ -369,6 +374,9 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
         # Step 4: Run FFmpeg with progress tracking
         logger.info("Step 4: Processing video with FFmpeg")
+        supabase.table('jobs').update({
+            'progress_message': 'Encoding video...'
+        }).eq('job_id', job_id).execute()
 
         returncode = run_ffmpeg_with_progress(
             cmd,
@@ -384,6 +392,10 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
         # Step 5: Copy to output (organized by username)
         logger.info("Step 5: Copying output to SMB")
+        supabase.table('jobs').update({
+            'progress_message': 'Copying output file...'
+        }).eq('job_id', job_id).execute()
+
         final_output_path = copy_file_to_output(output_path, output_filename, username=username)
         logger.info(f"  Output: {final_output_path}")
 
@@ -394,6 +406,7 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         supabase.table('jobs').update({
             'status': 'completed',
             'progress': 100,
+            'progress_message': 'Completed',
             'output_path': final_output_path,
             'final_duration': total_duration,
             'completed_at': datetime.utcnow().isoformat()
@@ -447,6 +460,7 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         # Update job as failed
         supabase.table('jobs').update({
             'status': 'failed',
+            'progress_message': 'Failed',
             'error_message': str(e),
             'completed_at': datetime.utcnow().isoformat()
         }).eq('job_id', job_id).execute()
