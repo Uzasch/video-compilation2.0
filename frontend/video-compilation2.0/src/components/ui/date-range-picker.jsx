@@ -1,5 +1,4 @@
 import * as React from "react"
-import { format } from "date-fns"
 import { CalendarIcon, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -9,6 +8,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover"
+
+// Simple date formatter to avoid date-fns dependency
+function formatDate(date) {
+  if (!date) return ""
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric"
+  })
+}
 
 function DateRangePicker({
   date,
@@ -47,11 +56,10 @@ function DateRangePicker({
           {date?.from ? (
             date.to ? (
               <>
-                {format(date.from, "MMM d, yyyy")} -{" "}
-                {format(date.to, "MMM d, yyyy")}
+                {formatDate(date.from)} - {formatDate(date.to)}
               </>
             ) : (
-              format(date.from, "MMM d, yyyy")
+              formatDate(date.from)
             )
           ) : (
             <span>{placeholder}</span>
