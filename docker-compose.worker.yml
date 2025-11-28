@@ -12,7 +12,10 @@ services:
     command: celery -A workers.celery_app worker -Q 4k_queue,default_queue --concurrency=1 --loglevel=info -n pc2@%h
     deploy:
       resources:
+        limits:
+          memory: 8g
         reservations:
+          memory: 4g
           devices:
             - driver: nvidia
               count: 1
@@ -35,7 +38,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - REDIS_URL=redis://192.168.1.104:6379/0  # Point to PC1's Redis
+      - REDIS_URL=redis://192.168.1.83:6379/0  # Point to PC1's Redis
       - PYTHONUNBUFFERED=1
       - WORKER_NAME=${HOSTNAME}
     restart: unless-stopped

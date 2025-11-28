@@ -281,7 +281,8 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         copy_results = copy_files_parallel(
             source_files=files_to_copy,
             dest_dir=dest_dir,
-            max_workers=5  # Optimal for most cases
+            max_workers=5,  # Optimal for most cases
+            job_logger=logger
         )
 
         # Check if all copies succeeded

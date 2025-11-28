@@ -137,8 +137,12 @@ def build_unified_compilation_command(
             logo_input_idx = input_index
             input_index += 1
 
+            # Scale logo to full frame then overlay centered
             filter_complex.append(
-                f"{video_stream}[{logo_input_idx}:v]overlay=W-w-10:10[v{i}_logo]"
+                f"[{logo_input_idx}:v]scale={target_width}:{target_height}[logo{i}_scaled]"
+            )
+            filter_complex.append(
+                f"{video_stream}[logo{i}_scaled]overlay=(W-w)/2:(H-h)/2[v{i}_logo]"
             )
             video_stream = f"[v{i}_logo]"
 

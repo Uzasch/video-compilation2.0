@@ -21,6 +21,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: video-compilation-backend
+    mem_limit: 8g
+    mem_reservation: 4g
     ports:
       - "8000:8000"
     volumes:
@@ -62,7 +64,10 @@ services:
     command: celery -A workers.celery_app worker -Q gpu_queue,4k_queue,default_queue --concurrency=1 --loglevel=info -n pc1@%h
     deploy:
       resources:
+        limits:
+          memory: 8g
         reservations:
+          memory: 4g
           devices:
             - driver: nvidia
               count: 1
@@ -109,7 +114,7 @@ services:
     env_file:
       - ./frontend/video-compilation2.0/.env
     environment:
-      - VITE_API_URL=http://localhost:8000/api
+      - VITE_API_URL=http://192.168.1.83:8000/api
     depends_on:
       - backend
     networks:

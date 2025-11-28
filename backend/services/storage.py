@@ -482,7 +482,8 @@ def _copy_with_shutil(source: str, dest: Path) -> Optional[str]:
 def copy_files_parallel(
     source_files: List[Dict[str, str]],
     dest_dir: str,
-    max_workers: int = 5
+    max_workers: int = 5,
+    job_logger: logging.Logger = None
 ) -> Dict[str, Optional[str]]:
     """
     Copy multiple files in parallel using ThreadPoolExecutor.
@@ -520,17 +521,19 @@ def copy_files_parallel(
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     results = {}
+    log = job_logger or logger  # Use job logger if provided, else module logger
 
     if not source_files:
         return results
 
-    logger.info(f"Starting parallel copy of {len(source_files)} files with {max_workers} workers")
+    log.info(f"Starting parallel copy of {len(source_files)} files with {max_workers} workers")
 
     def copy_single_wrapper(file_info):
         """Wrapper for parallel execution"""
         source_path = file_info['source_path']
         dest_filename = file_info['dest_filename']
 
+        log.info(f"  Copying: {dest_filename}")
         try:
             result_path = copy_file_sequential(
                 source_path=source_path,
@@ -555,14 +558,14 @@ def copy_files_parallel(
             results[dest_filename] = result_path
 
             if result_path:
-                logger.info(f"✓ Copied: {dest_filename}")
+                log.info(f"  ✓ Copied: {dest_filename}")
             else:
-                logger.error(f"✗ Failed: {dest_filename}")
+                log.error(f"  ✗ Failed: {dest_filename}")
 
     # Summary
     successful = sum(1 for v in results.values() if v is not None)
     failed = len(results) - successful
-    logger.info(f"Parallel copy completed: {successful} succeeded, {failed} failed")
+    log.info(f"Parallel copy completed: {successful} succeeded, {failed} failed")
 
     return results
 
