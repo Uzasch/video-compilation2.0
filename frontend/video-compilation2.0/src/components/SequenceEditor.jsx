@@ -1,9 +1,8 @@
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import SequenceItem from './SequenceItem'
 import InsertButton from './InsertButton'
-import { List, GripVertical } from 'lucide-react'
+import { List } from 'lucide-react'
 
 export default function SequenceEditor({ sequence, onChange, onVerifyPath, isVerifying, channels = [], onLogoChannelSelect }) {
   const updateItem = (position, updates) => {
@@ -106,54 +105,52 @@ export default function SequenceEditor({ sequence, onChange, onVerifyPath, isVer
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <ScrollArea className="h-[500px] pr-4">
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="sequence">
-              {(provided) => (
-                <div
-                  {...provided.droppableProps}
-                  ref={provided.innerRef}
-                  className="space-y-2"
-                >
-                  {sequence.items.map((item, index) => (
-                    <Draggable
-                      key={`item-${item.position}-${index}`}
-                      draggableId={`item-${item.position}-${index}`}
-                      index={index}
-                      isDragDisabled={!canDrag(item)}
-                    >
-                      {(provided, snapshot) => (
-                        <div
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                        >
-                          <div className={snapshot.isDragging ? 'opacity-90 shadow-lg' : ''}>
-                            <SequenceItem
-                              item={item}
-                              onUpdate={updateItem}
-                              onDelete={deleteItem}
-                              onApplyLogoToAll={handleApplyLogoToAll}
-                              onVerifyPath={onVerifyPath}
-                              isVerifying={isVerifying}
-                              defaultLogoPath={sequence.default_logo_path}
-                              dragHandleProps={canDrag(item) ? provided.dragHandleProps : null}
-                              channels={channels}
-                              onLogoChannelSelect={onLogoChannelSelect}
-                            />
-                          </div>
-                          {item.item_type !== 'outro' && (
-                            <InsertButton afterPosition={item.position} onInsert={insertItem} />
-                          )}
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
-          </DragDropContext>
-        </ScrollArea>
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <Droppable droppableId="sequence">
+            {(provided) => (
+              <div
+                {...provided.droppableProps}
+                ref={provided.innerRef}
+                className="space-y-2 max-h-[500px] overflow-y-auto pr-4"
+              >
+                {sequence.items.map((item, index) => (
+                  <Draggable
+                    key={`item-${item.position}-${index}`}
+                    draggableId={`item-${item.position}-${index}`}
+                    index={index}
+                    isDragDisabled={!canDrag(item)}
+                  >
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        style={provided.draggableProps.style}
+                        className={snapshot.isDragging ? 'opacity-90 shadow-lg' : ''}
+                      >
+                        <SequenceItem
+                          item={item}
+                          onUpdate={updateItem}
+                          onDelete={deleteItem}
+                          onApplyLogoToAll={handleApplyLogoToAll}
+                          onVerifyPath={onVerifyPath}
+                          isVerifying={isVerifying}
+                          defaultLogoPath={sequence.default_logo_path}
+                          dragHandleProps={canDrag(item) ? provided.dragHandleProps : null}
+                          channels={channels}
+                          onLogoChannelSelect={onLogoChannelSelect}
+                        />
+                        {item.item_type !== 'outro' && (
+                          <InsertButton afterPosition={item.position} onInsert={insertItem} />
+                        )}
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       </CardContent>
     </Card>
   )
