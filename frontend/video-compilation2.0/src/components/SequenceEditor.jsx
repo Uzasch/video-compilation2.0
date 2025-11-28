@@ -1,4 +1,5 @@
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
+import { toast } from 'sonner'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import SequenceItem from './SequenceItem'
 import InsertButton from './InsertButton'
@@ -43,11 +44,13 @@ export default function SequenceEditor({ sequence, onChange, onVerifyPath, isVer
     onChange({ ...sequence, items })
   }
 
-  const handleApplyLogoToAll = (logoPath) => {
+  const handleApplyLogoToAll = (logoPath, logoChannel) => {
     const updatedItems = sequence.items.map((item) =>
-      item.item_type === 'video' ? { ...item, logo_path: logoPath } : item
+      item.item_type === 'video' ? { ...item, logo_path: logoPath, logo_channel: logoChannel } : item
     )
     onChange({ ...sequence, items: updatedItems })
+    const videoCount = updatedItems.filter(item => item.item_type === 'video').length
+    toast.success(`Logo applied to ${videoCount} video${videoCount !== 1 ? 's' : ''}`)
   }
 
   const handleDragEnd = (result) => {
@@ -124,7 +127,11 @@ export default function SequenceEditor({ sequence, onChange, onVerifyPath, isVer
                       <div
                         ref={provided.innerRef}
                         {...provided.draggableProps}
-                        style={provided.draggableProps.style}
+                        style={{
+                          ...provided.draggableProps.style,
+                          left: 'auto',
+                          top: 'auto'
+                        }}
                         className={snapshot.isDragging ? 'opacity-90 shadow-lg' : ''}
                       >
                         <SequenceItem

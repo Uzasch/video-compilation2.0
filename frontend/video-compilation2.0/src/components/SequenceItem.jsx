@@ -32,8 +32,15 @@ export default function SequenceItem({
 }) {
   const [isOpen, setIsOpen] = useState(false)
   const [logoPopoverOpen, setLogoPopoverOpen] = useState(false)
+  const [applyAllClicked, setApplyAllClicked] = useState(false)
   const config = itemConfig[item.item_type]
   const Icon = config.icon
+
+  const handleApplyAll = () => {
+    onApplyLogoToAll(item.logo_path, item.logo_channel)
+    setApplyAllClicked(true)
+    setTimeout(() => setApplyAllClicked(false), 1500)
+  }
 
   const canDelete = !['intro', 'outro'].includes(item.item_type)
   const canHaveLogo = item.item_type === 'video'
@@ -192,8 +199,20 @@ export default function SequenceItem({
                   <Button variant="outline" size="sm" onClick={() => onUpdate(item.position, { logo_path: defaultLogoPath, logo_channel: null })}>
                     Reset
                   </Button>
-                  <Button variant="secondary" size="sm" onClick={() => onApplyLogoToAll(item.logo_path)}>
-                    Apply All
+                  <Button
+                    variant={applyAllClicked ? "default" : "secondary"}
+                    size="sm"
+                    onClick={handleApplyAll}
+                    className={applyAllClicked ? "bg-green-600 hover:bg-green-600" : ""}
+                  >
+                    {applyAllClicked ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1" />
+                        Applied
+                      </>
+                    ) : (
+                      "Apply All"
+                    )}
                   </Button>
                 </div>
                 {item.logo_path && (

@@ -55,6 +55,14 @@ export default function NewCompilation() {
       return data
     },
     onSuccess: (data) => {
+      // If logos are enabled, set logo_channel to the selected channel for all video items
+      if (enableLogos && channel) {
+        data.items = data.items.map(item =>
+          item.item_type === 'video'
+            ? { ...item, logo_channel: channel }
+            : item
+        )
+      }
       setSequence(data)
       const allAvailable = data.items.every(item => item.path_available)
       setPathsVerified(allAvailable)
