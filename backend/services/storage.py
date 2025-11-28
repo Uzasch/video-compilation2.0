@@ -128,9 +128,14 @@ def normalize_paths(paths: List[str]) -> List[str]:
             if len(parts) >= 3:
                 share_name = parts[2]  # e.g., "Share4"
                 remaining = "/".join(parts[3:])
-                # Convert to UNC: \\192.168.1.6\Share4\...
-                path = f"\\\\192.168.1.6\\{share_name}\\{remaining}"
-                path = path.replace("/", "\\")
+
+                if IS_DOCKER and share_name in DOCKER_MOUNTS:
+                    # Convert to Docker mount path
+                    path = f"{DOCKER_MOUNTS[share_name]}/{remaining}".rstrip("/")
+                else:
+                    # Convert to UNC: \\192.168.1.6\Share4\...
+                    path = f"\\\\192.168.1.6\\{share_name}\\{remaining}"
+                    path = path.replace("/", "\\")
             normalized.append(path)
             continue
 
@@ -573,6 +578,73 @@ def normalize_path_for_server(path: str) -> str:
         Normalized path (UNC on Windows, Docker mount on Linux)
     """
     return normalize_paths([path])[0]
+
+
+def convert_path_for_client(path: str, client_os: str = "windows") -> str:
+    """
+    Convert a UNC path to user-friendly format based on client OS.
+
+    Args:
+        path: UNC path (e.g., \\\\192.168.1.6\\Share3\\Public\\video.mp4)
+        client_os: Target OS - "windows" or "mac"
+
+    Returns:
+        User-friendly path:
+        - Windows: U:\\Public\\video.mp4
+        - Mac: /Volumes/Share3/Public/video.mp4
+
+    Example:
+        Input: "\\\\192.168.1.6\\Share3\\Public\\video-compilation\\user\\file.mp4"
+        Windows Output: "U:\\Public\\video-compilation\\user\\file.mp4"
+        Mac Output: "/Volumes/Share3/Public/video-compilation/user/file.mp4"
+    """
+    if not path:
+        return path
+
+    # Handle UNC paths (\\192.168.1.6\Share3\...)
+    if path.startswith("\\\\"):
+        parts = path.split("\\")
+        # parts[0] = '', parts[1] = '', parts[2] = '192.168.1.6', parts[3] = 'Share3', ...
+        if len(parts) >= 4:
+            share_name = parts[3]  # e.g., "Share3"
+            remaining = "\\".join(parts[4:])  # Everything after share name
+
+            if client_os.lower() == "mac":
+                # Convert to macOS format: /Volumes/Share3/path/to/file
+                return f"/Volumes/{share_name}/{remaining}".replace("\\", "/")
+            else:
+                # Convert to Windows drive letter format
+                if share_name in SHARE_MAPPINGS:
+                    drive = SHARE_MAPPINGS[share_name]  # e.g., "U:"
+                    return f"{drive}\\{remaining}"
+                else:
+                    # Unknown share, return as-is
+                    return path
+
+    # Handle Docker mount paths (/mnt/share3/...)
+    if path.startswith("/mnt/"):
+        parts = path.split("/")
+        if len(parts) >= 3:
+            mount_name = parts[2]  # e.g., "share3"
+            remaining = "/".join(parts[3:])
+
+            # Find share name from DOCKER_MOUNTS
+            share_name = None
+            for share, mount in DOCKER_MOUNTS.items():
+                if mount == f"/mnt/{mount_name}":
+                    share_name = share
+                    break
+
+            if share_name:
+                if client_os.lower() == "mac":
+                    return f"/Volumes/{share_name}/{remaining}"
+                else:
+                    if share_name in SHARE_MAPPINGS:
+                        drive = SHARE_MAPPINGS[share_name]
+                        return f"{drive}\\{remaining}".replace("/", "\\")
+
+    # Return as-is if format not recognized
+    return path
 
 
 def copy_file_to_temp(source_path: str, job_id: str, filename: str) -> str:
