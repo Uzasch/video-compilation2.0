@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import apiClient from '../services/api'
+import { convertPathForClient } from '../utils/pathUtils'
 import Layout from '../components/Layout'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -42,7 +43,9 @@ import {
   RefreshCw,
   AlertCircle,
   User,
-  FileVideo
+  FileVideo,
+  Copy,
+  Check
 } from 'lucide-react'
 
 const statusConfig = {
@@ -105,6 +108,7 @@ export default function CompilationDetails() {
   const queryClient = useQueryClient()
   const [moveDialogOpen, setMoveDialogOpen] = useState(false)
   const [customFilename, setCustomFilename] = useState('')
+  const [copied, setCopied] = useState(false)
 
   // Fetch job details
   const { data: job, isLoading: jobLoading, error: jobError } = useQuery({
@@ -173,6 +177,46 @@ export default function CompilationDetails() {
 
   const handleMoveToProduction = () => {
     moveMutation.mutate(customFilename)
+  }
+
+  const handleCopySequence = () => {
+    if (!items || items.length === 0) return
+
+    const lines = []
+    for (const item of items) {
+      // Skip intro and outro
+      if (item.item_type === 'intro' || item.item_type === 'outro') continue
+      // Skip images
+      if (item.item_type === 'image') continue
+
+      // For videos, add video_id
+      if (item.item_type === 'video' && item.video_id) {
+        lines.push(item.video_id)
+      }
+      // For transitions with manual path, add the path
+      else if (item.item_type === 'transition' && item.path) {
+        lines.push(item.path)
+      }
+    }
+
+    const text = lines.join('\n')
+
+    // Fallback for HTTP (navigator.clipboard requires HTTPS)
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    textArea.style.position = 'fixed'
+    textArea.style.left = '-9999px'
+    document.body.appendChild(textArea)
+    textArea.select()
+    try {
+      document.execCommand('copy')
+      setCopied(true)
+      toast.success(`Copied ${lines.length} items to clipboard`)
+      setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      toast.error('Failed to copy to clipboard')
+    }
+    document.body.removeChild(textArea)
   }
 
   if (jobLoading) {
@@ -341,7 +385,7 @@ export default function CompilationDetails() {
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Output Path</p>
                   <p className="text-sm font-mono bg-muted/50 p-2 rounded break-all">
-                    {job.output_path}
+                    {convertPathForClient(job.output_path)}
                   </p>
                 </div>
               )}
@@ -350,7 +394,7 @@ export default function CompilationDetails() {
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">Production Path</p>
                   <p className="text-sm font-mono bg-primary/10 p-2 rounded break-all text-primary">
-                    {job.production_path}
+                    {convertPathForClient(job.production_path)}
                   </p>
                 </div>
               )}
@@ -360,10 +404,31 @@ export default function CompilationDetails() {
           {/* Items Card */}
           <Card className="bg-card/60 backdrop-blur-sm border-border/50">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Film className="h-5 w-5" />
-                Sequence Items
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center gap-2">
+                  <Film className="h-5 w-5" />
+                  Sequence Items
+                </CardTitle>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopySequence}
+                  disabled={!items || items.length === 0}
+                  className={copied ? 'bg-green-600 hover:bg-green-600 text-white border-green-600' : ''}
+                >
+                  {copied ? (
+                    <>
+                      <Check className="mr-2 h-4 w-4" />
+                      Copied
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="mr-2 h-4 w-4" />
+                      Copy IDs
+                    </>
+                  )}
+                </Button>
+              </div>
               <CardDescription>
                 {items?.length || 0} items in this compilation
               </CardDescription>
