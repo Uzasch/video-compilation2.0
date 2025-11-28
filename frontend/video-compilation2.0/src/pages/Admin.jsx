@@ -529,11 +529,17 @@ function JobHistoryTable({ channelsData }) {
         </div>
       </CardHeader>
       <CardContent>
+        <div className="min-h-[480px]">
         {isLoading ? (
           <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
               <Skeleton key={i} className="h-12 w-full" />
             ))}
+          </div>
+        ) : jobs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-[480px]">
+            <BarChart3 className="h-12 w-12 text-muted-foreground/50 mb-4" />
+            <p className="text-muted-foreground">No jobs found</p>
           </div>
         ) : (
           <>
@@ -624,6 +630,7 @@ function JobHistoryTable({ channelsData }) {
             )}
           </>
         )}
+        </div>
       </CardContent>
     </Card>
   )
