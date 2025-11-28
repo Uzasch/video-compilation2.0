@@ -37,7 +37,7 @@ export default function JobCard({ job }) {
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Tv className="h-4 w-4" />
-                {job.enable_4k ? '4K' : 'HD'}
+                {job.enable_4k ? '4K' : 'Full HD'}
               </span>
               <span className="flex items-center gap-1">
                 <Calendar className="h-4 w-4" />

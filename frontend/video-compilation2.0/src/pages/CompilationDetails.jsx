@@ -309,7 +309,7 @@ export default function CompilationDetails() {
                   <p className="text-sm text-muted-foreground">Quality</p>
                   <p className="font-medium text-foreground flex items-center gap-2">
                     <Tv className="h-4 w-4" />
-                    {job.enable_4k ? '4K Ultra HD' : 'HD 1080p'}
+                    {job.enable_4k ? '4K Ultra HD' : 'Full HD 1080p'}
                   </p>
                 </div>
                 <div>

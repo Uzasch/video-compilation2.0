@@ -260,7 +260,7 @@ export default function History() {
                           <TableCell>
                             <span className="flex items-center gap-1">
                               <Tv className="h-3 w-3 text-muted-foreground" />
-                              {job.enable_4k ? '4K' : 'HD'}
+                              {job.enable_4k ? '4K' : 'Full HD'}
                             </span>
                           </TableCell>
                           <TableCell>
