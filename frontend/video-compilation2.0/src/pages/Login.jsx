@@ -38,22 +38,12 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden bg-background">
-      {/* Background Elements */}
-      <div className="absolute inset-0 z-0">
-        <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-ring/10 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-ring/15 blur-[120px]" />
-        <div className="absolute top-[40%] right-[20%] w-[30%] h-[30%] rounded-full bg-secondary/10 blur-[100px]" />
-      </div>
-
-      <Card className="w-full mx-auto max-w-md bg-card/60 backdrop-blur-xl border-border/50 shadow-2xl relative z-10 animate-in fade-in zoom-in duration-500 slide-in-from-bottom-4">
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <Card className="w-full mx-auto max-w-md bg-card border-border shadow-xl animate-in fade-in zoom-in duration-500 slide-in-from-bottom-4">
         <CardHeader className="text-center space-y-4 pb-6">
           {/* Logo */}
-          <div className="relative mx-auto">
-            <div className="absolute inset-0 w-16 h-16 rounded-2xl bg-ring/20 blur-xl" />
-            <div className="relative w-16 h-16 bg-gradient-to-br from-primary to-primary/80 rounded-2xl flex items-center justify-center shadow-lg">
-              <Video className="w-8 h-8 text-primary-foreground" />
-            </div>
+          <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center shadow-lg">
+            <Video className="w-8 h-8 text-primary-foreground" />
           </div>
 
           <div className="space-y-2">

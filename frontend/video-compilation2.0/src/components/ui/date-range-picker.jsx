@@ -9,7 +9,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-// Simple date formatter to avoid date-fns dependency
 function formatDate(date) {
   if (!date) return ""
   return date.toLocaleDateString("en-US", {
@@ -30,7 +29,6 @@ function DateRangePicker({
 
   const handleSelect = (range) => {
     onDateChange?.(range)
-    // Close popover when both dates are selected
     if (range?.from && range?.to) {
       setOpen(false)
     }
