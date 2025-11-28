@@ -204,14 +204,15 @@ export default function History() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            <div className="min-h-[480px]">
             {isLoading ? (
               <div className="space-y-3">
-                {[1, 2, 3, 4, 5].map((i) => (
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((i) => (
                   <Skeleton key={i} className="h-12 w-full" />
                 ))}
               </div>
             ) : data?.jobs?.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
+              <div className="flex flex-col items-center justify-center h-[480px]">
                 <HistoryIcon className="h-12 w-12 text-muted-foreground/50 mb-4" />
                 <p className="text-muted-foreground mb-4">No compilation history yet</p>
                 <Button variant="outline" onClick={() => navigate('/new')}>
@@ -325,6 +326,7 @@ export default function History() {
                 )}
               </>
             )}
+            </div>
           </CardContent>
         </Card>
       </div>
