@@ -290,10 +290,18 @@ def copy_file_sequential(
     dest_path = Path(dest_dir)
     dest_path.mkdir(parents=True, exist_ok=True)
 
+    # Build dest_file path with consistent slashes (avoid Path / operator mixing slashes)
     if dest_filename:
-        dest_file = dest_path / dest_filename
+        filename = dest_filename
     else:
-        dest_file = dest_path / source_file_path.name
+        filename = source_file_path.name
+
+    # Use appropriate separator based on path type
+    if dest_dir.startswith('\\\\'):
+        dest_file_str = f"{dest_dir}\\{filename}"
+    else:
+        dest_file_str = f"{dest_dir}/{filename}"
+    dest_file = Path(dest_file_str)
 
     # Check if source exists
     if not source_file_path.exists():
@@ -306,43 +314,46 @@ def copy_file_sequential(
         dest_size = dest_file.stat().st_size
         if source_size == dest_size:
             logger.info(f"  Skipping (already exists): {dest_file.name}")
-            return str(dest_file)
+            return dest_file_str  # Return consistent path string
         else:
             logger.warning(f"  File exists but size mismatch ({dest_size} != {source_size}), re-copying: {dest_file.name}")
 
     if not use_optimal_method:
         # Skip to shutil directly
-        return _copy_with_shutil(normalized_source, dest_file)
+        if _copy_with_shutil(normalized_source, dest_file):
+            return dest_file_str
+        return None
 
     # ========== LINUX / DOCKER ==========
     if IS_DOCKER:
         # Method 1: Try rsync (best for network shares)
         if is_rsync_available():
-            result = _copy_with_rsync(normalized_source, dest_file)
-            if result:
-                return result
+            if _copy_with_rsync(normalized_source, dest_file):
+                return dest_file_str
             logger.warning("rsync failed, trying cp fallback")
 
         # Method 2: Try cp with retry logic
         if is_cp_available():
-            result = _copy_with_cp(normalized_source, dest_file)
-            if result:
-                return result
+            if _copy_with_cp(normalized_source, dest_file):
+                return dest_file_str
             logger.warning("cp failed, trying shutil fallback")
 
         # Method 3: Final fallback to shutil
-        return _copy_with_shutil(normalized_source, dest_file)
+        if _copy_with_shutil(normalized_source, dest_file):
+            return dest_file_str
+        return None
 
     # ========== WINDOWS ==========
     else:
         # Method 1: Try robocopy
-        result = _copy_with_robocopy(source_file_path, dest_path, dest_file)
-        if result:
-            return result
+        if _copy_with_robocopy(source_file_path, dest_path, dest_file):
+            return dest_file_str
         logger.warning("robocopy failed, trying shutil fallback")
 
         # Method 2: Final fallback to shutil
-        return _copy_with_shutil(normalized_source, dest_file)
+        if _copy_with_shutil(normalized_source, dest_file):
+            return dest_file_str
+        return None
 
 
 def _copy_with_rsync(source: str, dest: Path) -> Optional[str]:
@@ -698,20 +709,25 @@ def copy_file_to_output(temp_path: str, filename: str, username: str = None) -> 
 
     # Use SMB output path (network share)
     output_dir = normalize_path_for_server(settings.smb_output_path)
-    output_path = Path(output_dir)
 
-    # Create user subdirectory if username provided
+    # Build path with consistent slashes (don't use Path() which uses OS-specific slashes)
     if username:
-        output_path = output_path / username
-        output_path.mkdir(parents=True, exist_ok=True)
+        # Use backslash for UNC paths, forward slash for Docker mount paths
+        if output_dir.startswith('\\\\'):
+            output_dir = f"{output_dir}\\{username}"
+        else:
+            output_dir = f"{output_dir}/{username}"
 
-    result = copy_file_sequential(temp_path, str(output_path), filename)
+    # Create directory
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    result = copy_file_sequential(temp_path, output_dir, filename)
 
     if not result:
         raise Exception(f"Failed to copy file to output: {temp_path}")
 
     # Normalize the result path to use consistent backslashes for UNC paths
-    if result.startswith('\\\\') or result.startswith('/mnt/'):
+    if result.startswith('\\\\'):
         result = result.replace('/', '\\')
 
     return result
