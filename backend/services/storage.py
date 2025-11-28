@@ -689,7 +689,7 @@ def copy_file_to_output(temp_path: str, filename: str, username: str = None) -> 
         username: Username for subdirectory (creates {smb_output_path}/{username}/)
 
     Returns:
-        Final output file path
+        Final output file path (normalized with consistent slashes)
 
     Raises:
         Exception: If copy fails
@@ -709,6 +709,10 @@ def copy_file_to_output(temp_path: str, filename: str, username: str = None) -> 
 
     if not result:
         raise Exception(f"Failed to copy file to output: {temp_path}")
+
+    # Normalize the result path to use consistent backslashes for UNC paths
+    if result.startswith('\\\\') or result.startswith('/mnt/'):
+        result = result.replace('/', '\\')
 
     return result
 

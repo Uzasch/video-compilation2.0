@@ -59,7 +59,9 @@ export function convertPathForClient(path) {
 
   // Handle UNC paths (\\192.168.1.6\Share3\...)
   if (path.startsWith('\\\\')) {
-    const parts = path.split('\\')
+    // Normalize mixed slashes to backslashes first
+    const normalizedPath = path.replace(/\//g, '\\')
+    const parts = normalizedPath.split('\\')
     // parts[0] = '', parts[1] = '', parts[2] = '192.168.1.6', parts[3] = 'Share3', ...
     if (parts.length >= 4) {
       const shareName = parts[3] // e.g., "Share3"
