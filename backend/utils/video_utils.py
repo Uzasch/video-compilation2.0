@@ -1,6 +1,7 @@
 import subprocess
 import json
 import logging
+from pathlib import Path
 from typing import Optional, Dict, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -39,11 +40,17 @@ def get_video_info(video_path: str) -> Optional[Dict]:
             video_path
         ]
 
+        # Wake up SMB mount by checking if path exists (handles stale connections)
+        try:
+            Path(video_path).exists()
+        except:
+            pass
+
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=30  # Increased for slow SMB connections
         )
 
         if result.returncode != 0:

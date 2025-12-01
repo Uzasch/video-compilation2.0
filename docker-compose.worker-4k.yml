@@ -1,79 +1,22 @@
 services:
-  # Redis - Task Queue
-  redis:
-    image: redis:7-alpine
-    container_name: video-compilation-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
-  # Backend - FastAPI
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: video-compilation-backend
-    mem_limit: 8g
-    mem_reservation: 4g
-    ports:
-      - "8000:8000"
-    volumes:
-      - ./backend:/app
-      - /app/venv  # Exclude venv from mounting
-      - ./logs:/app/logs
-      - ./temp:/app/temp
-      - ./uploads:/app/uploads  # Image uploads storage
-      - smb_share:/mnt/share
-      - smb_share2:/mnt/share2
-      - smb_share3:/mnt/share3
-      - smb_share4:/mnt/share4
-      - smb_share5:/mnt/share5
-      - smb_new_share_1:/mnt/new_share_1
-      - smb_new_share_2:/mnt/new_share_2
-      - smb_new_share_3:/mnt/new_share_3
-      - smb_new_share_4:/mnt/new_share_4
-    env_file:
-      - ./backend/.env
-    environment:
-      - REDIS_URL=redis://redis:6379/0
-      - PYTHONUNBUFFERED=1
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - app-network
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://192.168.1.83:8000/health', timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
-
-  # Celery Worker - Video Processing (PC1 - Main server)
+  # Celery Worker - 4K capable worker, connects to PC1's Redis
   # Queue assignment:
+  #   - 4k_queue: Large jobs (4K >20 videos, non-4K >40 videos)
   #   - gpu_queue: Text animation jobs, moderate 4K jobs
-  #   - default_queue: Simple jobs (no text animation, small video count)
+  #   - default_queue: Simple jobs (fallback)
+  # Change worker name to pc3, pc4, etc. depending on which PC this runs on
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: video-compilation-celery
-    command: celery -A workers.celery_app worker -Q gpu_queue,default_queue --concurrency=1 --loglevel=info -n pc1@%h
+    container_name: video-compilation-celery-4k
+    command: celery -A workers.celery_app worker -Q 4k_queue,gpu_queue,default_queue --concurrency=1 --loglevel=info -n pc3@%h
     deploy:
       resources:
         limits:
-          memory: 8g
+          memory: 32g
         reservations:
-          memory: 4g
+          memory: 16g
           devices:
             - driver: nvidia
               count: 1
@@ -96,42 +39,13 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://192.168.1.83:6379/0  # Point to PC1's Redis
       - PYTHONUNBUFFERED=1
-    depends_on:
-      redis:
-        condition: service_healthy
-    networks:
-      - app-network
+      - WORKER_NAME=${HOSTNAME}
     restart: unless-stopped
-
-  # Frontend - Vite Dev Server
-  frontend:
-    build:
-      context: ./frontend/video-compilation2.0
-      dockerfile: Dockerfile
-      target: development
-    container_name: video-compilation-frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend/video-compilation2.0:/app
-      - /app/node_modules  # Exclude node_modules from mounting
-    env_file:
-      - ./frontend/video-compilation2.0/.env
-    environment:
-      - VITE_API_URL=http://192.168.1.83:8000/api
-    depends_on:
-      - backend
-    networks:
-      - app-network
-    stdin_open: true
-    tty: true
-    restart: unless-stopped
+    network_mode: host
 
 volumes:
-  redis_data:
-
   # SMB Network Shares with credentials
   smb_share:
     driver: local
@@ -195,7 +109,3 @@ volumes:
       type: cifs
       o: "username=uzair,password=Uzasch@2222,vers=3.0,file_mode=0777,dir_mode=0777"
       device: "//192.168.1.10/New_Share_4"
-
-networks:
-  app-network:
-    driver: bridge

@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
 from services.bigquery import get_videos_info_by_ids, get_all_channel_assets, get_production_path
-from services.storage import normalize_paths, normalize_path_for_server
+from services.storage import normalize_paths, normalize_path_for_server, copy_file_sequential
 from services.supabase import get_supabase_client
 from services.logger import setup_validation_logger, setup_job_logger
 from utils.video_utils import get_videos_info_batch
@@ -10,6 +10,7 @@ from datetime import datetime
 from uuid import uuid4
 import shutil
 import logging
+import asyncio
 from pathlib import Path
 from celery import Celery
 
@@ -69,9 +70,17 @@ class VerifyPathRequest(BaseModel):
 class VerifyPathResponse(BaseModel):
     path: str
     available: bool
-    duration: Optional[float] = None
-    resolution: Optional[str] = None
-    is_4k: Optional[bool] = None
+
+
+class RevalidateRequest(BaseModel):
+    """Request to revalidate existing items without fetching from BigQuery"""
+    items: List[JobItem]
+
+
+class RevalidateResponse(BaseModel):
+    """Response with revalidated items"""
+    total_duration: float
+    items: List[JobItem]
 
 
 @router.post("/verify-path", response_model=VerifyPathResponse)
@@ -95,8 +104,8 @@ async def verify_single_path(request: VerifyPathRequest):
     normalized_paths = normalize_paths([request.path])
     normalized_path = normalized_paths[0] if normalized_paths else request.path
 
-    # Get video info using ffprobe
-    videos_info = get_videos_info_batch([normalized_path], max_workers=1)
+    # Get video info using ffprobe (run in thread to avoid blocking)
+    videos_info = await asyncio.to_thread(get_videos_info_batch, [normalized_path], 1)
     video_info = videos_info.get(normalized_path)
 
     if video_info:
@@ -112,6 +121,68 @@ async def verify_single_path(request: VerifyPathRequest):
             path=request.path,
             available=False
         )
+
+
+@router.post("/revalidate", response_model=RevalidateResponse)
+async def revalidate_items(request: RevalidateRequest, max_workers: int = 8):
+    """
+    Revalidate existing items without fetching from BigQuery.
+
+    Use this when:
+    - User has edited paths manually
+    - User has deleted/reordered items
+    - User wants to recheck if paths are available
+
+    This preserves all user edits and only rechecks path availability via ffprobe.
+    """
+    logger.info(f"Revalidating {len(request.items)} items")
+
+    # Collect all paths to verify
+    paths_to_check = []
+    for item in request.items:
+        if item.path:
+            paths_to_check.append(item.path)
+
+    # Normalize and check paths
+    normalized_paths = normalize_paths(paths_to_check)
+
+    # Batch get video info (run in thread to avoid blocking)
+    videos_info_batch = await asyncio.to_thread(get_videos_info_batch, normalized_paths, max_workers)
+
+    # Map original paths to video info
+    path_to_info = {}
+    for original, normalized in zip(paths_to_check, normalized_paths):
+        path_to_info[original] = videos_info_batch.get(normalized)
+
+    # Update items with fresh validation
+    updated_items = []
+    total_duration = 0.0
+
+    for item in request.items:
+        updated_item = item.model_copy()
+
+        if item.path:
+            video_info = path_to_info.get(item.path)
+
+            if video_info:
+                updated_item.path_available = True
+                updated_item.duration = video_info['duration']
+                updated_item.resolution = f"{video_info['width']}x{video_info['height']}"
+                updated_item.is_4k = video_info['is_4k']
+                updated_item.error = None
+                total_duration += video_info['duration']
+            else:
+                updated_item.path_available = False
+                updated_item.error = "Path not accessible"
+
+        updated_items.append(updated_item)
+
+    logger.info(f"Revalidation complete: {sum(1 for i in updated_items if i.path_available)}/{len(updated_items)} paths available")
+
+    return RevalidateResponse(
+        total_duration=total_duration,
+        items=updated_items
+    )
 
 
 @router.post("/verify", response_model=VerifyJobResponse)
@@ -158,7 +229,7 @@ async def verify_job(request: VerifyJobRequest, user_id: str, max_workers: int =
 
     # Step 1: Get channel branding assets (batched - single query)
     validation_logger.info("Step 1: Fetching channel branding assets (batched)...")
-    assets = get_all_channel_assets(request.channel_name)
+    assets = await asyncio.to_thread(get_all_channel_assets, request.channel_name)
 
     # Apply user preferences for intro/outro/logos
     intro_path = assets['intro'] if request.include_intro else None
@@ -180,7 +251,7 @@ async def verify_job(request: VerifyJobRequest, user_id: str, max_workers: int =
     videos_info = {}
     if request.video_ids:
         validation_logger.info("Step 2: Fetching video info from BigQuery (batch query)...")
-        videos_info = get_videos_info_by_ids(request.video_ids)
+        videos_info = await asyncio.to_thread(get_videos_info_by_ids, request.video_ids)
         validation_logger.info(f"  Found {len(videos_info)}/{len(request.video_ids)} videos in BigQuery")
         validation_logger.info("")
 
@@ -240,9 +311,9 @@ async def verify_job(request: VerifyJobRequest, user_id: str, max_workers: int =
         })
 
     # Step 3: Get video metadata for all paths (ffprobe = existence check + metadata)
-    # Collect unique paths to avoid redundant ffprobe calls
+    # Collect unique paths while preserving order (dict.fromkeys preserves insertion order)
     all_paths = [item['path'] for item in items_to_verify if item['path']]
-    unique_paths = list(set(all_paths))
+    unique_paths = list(dict.fromkeys(all_paths))  # Preserves order unlike set()
 
     validation_logger.info("Step 3: Getting video info via ffprobe (existence + metadata)...")
     validation_logger.info(f"  Total items: {len(items_to_verify)}, Unique paths: {len(unique_paths)}")
@@ -251,7 +322,8 @@ async def verify_job(request: VerifyJobRequest, user_id: str, max_workers: int =
     normalized_paths = normalize_paths(unique_paths)
 
     # Batch get video info - if ffprobe succeeds, file exists; if fails, file doesn't exist
-    videos_info_batch = get_videos_info_batch(normalized_paths, max_workers=max_workers)
+    # Run in thread to avoid blocking async event loop
+    videos_info_batch = await asyncio.to_thread(get_videos_info_batch, normalized_paths, max_workers)
 
     # Map original paths to video info
     path_video_info = {}
@@ -438,23 +510,41 @@ async def submit_job(request: SubmitJobRequest):
             if item.item_type == 'video'
         )
 
-        # Route to appropriate queue:
-        # 1. Text animation enabled → gpu_queue (GPU-intensive subtitle rendering)
-        # 2. 4K enabled and >20 videos → 4k_queue
-        # 3. 4K disabled and >40 videos → 4k_queue
-        # 4. All other jobs → default_queue
-        if has_text_animation:
-            # Text animation jobs need GPU for subtitle rendering
-            task = process_gpu_compilation.delay(job_id)
-            queue_name = "gpu_queue"
-        elif (request.enable_4k and video_count > 20) or (not request.enable_4k and video_count > 40):
-            # Large jobs go to 4k_queue (load balanced across all workers)
+        # Route to appropriate queue based on job complexity:
+        #
+        # 4k_queue (heaviest - large jobs, can have text animation):
+        #   - 4K enabled AND >20 videos
+        #   - 4K disabled AND >40 videos
+        #   - Text animation with large video count
+        #
+        # gpu_queue (medium - GPU-intensive, smaller jobs):
+        #   - Text animation enabled AND <20 videos (4K) or <40 videos (non-4K)
+        #   - 4K enabled AND <=20 videos
+        #
+        # default_queue (lightest - simple jobs only):
+        #   - No text animation
+        #   - 4K disabled or <=10 videos with 4K
+        #   - <=30 videos without 4K
+
+        is_large_job = (request.enable_4k and video_count > 20) or (not request.enable_4k and video_count > 40)
+        is_medium_job = (request.enable_4k and video_count <= 20) or has_text_animation
+        is_small_job = not has_text_animation and (
+            (request.enable_4k and video_count <= 10) or
+            (not request.enable_4k and video_count <= 30)
+        )
+
+        if is_large_job:
+            # Large jobs (including text animation with many videos) → 4k_queue
             task = process_4k_compilation.delay(job_id)
             queue_name = "4k_queue"
-        else:
-            # Standard/small jobs go to default_queue
+        elif is_small_job:
+            # Simple small jobs → default_queue
             task = process_standard_compilation.delay(job_id)
             queue_name = "default_queue"
+        else:
+            # Medium jobs (text animation, moderate 4K) → gpu_queue
+            task = process_gpu_compilation.delay(job_id)
+            queue_name = "gpu_queue"
 
         logger.info(f"Job {job_id} queued to {queue_name} (task_id: {task.id}, videos: {video_count}, 4k: {request.enable_4k}, text_animation: {has_text_animation})")
 
@@ -517,7 +607,7 @@ async def move_to_production(job_id: str, request: MoveToProductionRequest):
     job_logger.info(f"Custom filename requested: {request.custom_filename or 'None (auto-generate)'}")
 
     # 2. Get production path from BigQuery and normalize for server
-    production_base_raw = get_production_path(job['channel_name'])
+    production_base_raw = await asyncio.to_thread(get_production_path, job['channel_name'])
     if not production_base_raw:
         job_logger.error(f"Production path not configured for channel: {job['channel_name']}")
         raise HTTPException(
@@ -562,25 +652,42 @@ async def move_to_production(job_id: str, request: MoveToProductionRequest):
         # Ensure production directory exists
         production_dir.mkdir(parents=True, exist_ok=True)
 
-        # Copy file
-        job_logger.info("Copying file...")
-        shutil.copy2(temp_path, production_path)
-        job_logger.info("File copied successfully")
+        # Start copy in background (fire and forget)
+        job_logger.info("Starting background copy...")
 
-        # 6. Update database
-        supabase.table('jobs').update({
-            'production_path': str(production_path),
-            'moved_to_production': True,
-            'production_moved_at': datetime.utcnow().isoformat()
-        }).eq('job_id', job_id).execute()
+        async def copy_and_update():
+            try:
+                result = await asyncio.to_thread(
+                    copy_file_sequential,
+                    str(temp_path),
+                    str(production_dir),
+                    production_filename
+                )
+                if result:
+                    # Update database after copy completes
+                    supabase.table('jobs').update({
+                        'production_path': str(production_path),
+                        'moved_to_production': True,
+                        'production_moved_at': datetime.utcnow().isoformat()
+                    }).eq('job_id', job_id).execute()
+                    job_logger.info("File copied successfully")
+                    job_logger.info("Database updated")
+                    job_logger.info(f"Result: SUCCESS - {production_filename}")
+                else:
+                    job_logger.error(f"Failed to copy file to production: {temp_path}")
+            except Exception as e:
+                job_logger.error(f"Background copy failed: {e}")
 
-        job_logger.info("Database updated")
-        job_logger.info(f"Result: SUCCESS - {production_filename}")
+        # Fire and forget - don't await
+        asyncio.create_task(copy_and_update())
+
+        job_logger.info(f"Copy started for: {production_filename}")
 
         return {
             'success': True,
             'production_path': str(production_path),
-            'filename': production_filename
+            'filename': production_filename,
+            'message': 'Copy started in background'
         }
 
     except Exception as e:

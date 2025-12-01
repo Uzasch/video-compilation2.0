@@ -1,15 +1,14 @@
 services:
   # Celery Worker - Connects to PC1's Redis
-  # All PCs have GPU, so all workers can handle both queues:
-  #   - 4k_queue: Large 4K jobs (>40 videos AND 4K enabled)
-  #   - default_queue: Everything else (standard jobs, small 4K jobs)
+  # Queue assignment:
+  #   - default_queue: Simple jobs (no text animation, small video count)
   # Change worker name to pc2 or pc3 depending on which PC this runs on
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: video-compilation-celery-worker
-    command: celery -A workers.celery_app worker -Q 4k_queue,default_queue --concurrency=1 --loglevel=info -n pc2@%h
+    command: celery -A workers.celery_app worker -Q default_queue --concurrency=1 --loglevel=info -n pc2@%h
     deploy:
       resources:
         limits:

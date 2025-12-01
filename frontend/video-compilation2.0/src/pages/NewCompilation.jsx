@@ -87,6 +87,39 @@ export default function NewCompilation() {
     }
   })
 
+  // Revalidate mutation - only checks paths, preserves user edits
+  const revalidateMutation = useMutation({
+    mutationFn: async (items) => {
+      const { data } = await apiClient.post('/jobs/revalidate', { items })
+      return data
+    },
+    onSuccess: (data) => {
+      // Preserve logo_channel from current sequence
+      if (sequence && enableLogos && channel) {
+        data.items = data.items.map((item, index) => {
+          const originalItem = sequence.items[index]
+          if (item.item_type === 'video' && originalItem?.logo_channel) {
+            return { ...item, logo_channel: originalItem.logo_channel }
+          }
+          return item.item_type === 'video' ? { ...item, logo_channel: channel } : item
+        })
+      }
+      setSequence(prev => ({ ...prev, ...data }))
+      const allAvailable = data.items.every(item => item.path_available)
+      setPathsVerified(allAvailable)
+
+      if (!allAvailable) {
+        const missingCount = data.items.filter(item => !item.path_available).length
+        toast.warning(`${missingCount} item(s) have unavailable paths`)
+      } else {
+        toast.success('All paths verified successfully!')
+      }
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.detail || 'Revalidation failed')
+    }
+  })
+
   // Submit mutation
   const submitMutation = useMutation({
     mutationFn: async (jobData) => {
@@ -112,11 +145,8 @@ export default function NewCompilation() {
 
   const handleReverify = () => {
     if (!sequence) return
-    const manualPaths = sequence.items
-      .filter(item => item.item_type === 'transition' || item.item_type === 'image')
-      .filter(item => item.path)
-      .map(item => ({ position: item.position, path: item.path }))
-    verifyMutation.mutate({ channel, videoIds, includeIntro, includeOutro, enableLogos, manualPaths })
+    // Use revalidate to preserve user edits (deleted items, changed paths)
+    revalidateMutation.mutate(sequence.items)
   }
 
   const handleVerifyPath = async (position, path) => {
@@ -384,10 +414,10 @@ export default function NewCompilation() {
                     <Button
                       variant="outline"
                       onClick={handleReverify}
-                      disabled={verifyMutation.isPending}
+                      disabled={revalidateMutation.isPending}
                       className="flex-1"
                     >
-                      {verifyMutation.isPending ? (
+                      {revalidateMutation.isPending ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : null}
                       Re-verify All Paths
