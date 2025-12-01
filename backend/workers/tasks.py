@@ -166,6 +166,12 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         return {"status": "failed", "error": "Job not found"}
 
     job = job_result.data[0]
+
+    # Idempotency check: Skip if job already completed (prevents duplicate processing from task redelivery)
+    if job.get('status') == 'completed':
+        logging.info(f"Job {job_id} already completed, skipping duplicate execution (task redelivery)")
+        return {"status": "skipped", "reason": "already_completed", "job_id": job_id}
+
     user_id = job.get('user_id', 'unknown')
 
     # Get username from profiles table
