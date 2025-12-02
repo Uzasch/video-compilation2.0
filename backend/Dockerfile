@@ -10,6 +10,7 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    rsync \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
