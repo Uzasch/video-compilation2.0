@@ -188,17 +188,19 @@ def build_unified_compilation_command(
     use_gpu = check_gpu()
 
     # Encoding settings
+    # CRF 23 with maxrate 9M cap - smart quality allocation with bandwidth limit
     if enable_4k:
         if use_gpu:
             # GPU-Accelerated (Nvidia NVENC) - 4K
+            # -cq is NVENC's equivalent of CRF
             cmd.extend([
                 '-c:v', 'h264_nvenc',
-                '-preset', 'p5',
+                '-preset', 'p3',
                 '-tune', 'hq',
                 '-rc', 'vbr',
-                '-b:v', '40M',
-                '-maxrate', '50M',
-                '-bufsize', '60M',
+                '-cq', '23',
+                '-maxrate', '9M',
+                '-bufsize', '12M',
                 '-profile:v', 'high',
                 '-level', '5.1',
                 '-pix_fmt', 'yuv420p',
@@ -210,7 +212,9 @@ def build_unified_compilation_command(
             cmd.extend([
                 '-c:v', 'libx264',
                 '-preset', 'medium',
-                '-crf', '18',
+                '-crf', '23',
+                '-maxrate', '9M',
+                '-bufsize', '12M',
                 '-profile:v', 'high',
                 '-level', '5.1',
                 '-pix_fmt', 'yuv420p',
@@ -226,14 +230,15 @@ def build_unified_compilation_command(
     else:
         if use_gpu:
             # GPU-Accelerated (Nvidia NVENC) - 1080p
+            # -cq is NVENC's equivalent of CRF
             cmd.extend([
                 '-c:v', 'h264_nvenc',
-                '-preset', 'p5',
+                '-preset', 'p3',
                 '-tune', 'hq',
                 '-rc', 'vbr',
-                '-b:v', '16M',
-                '-maxrate', '20M',
-                '-bufsize', '24M',
+                '-cq', '23',
+                '-maxrate', '9M',
+                '-bufsize', '12M',
                 '-profile:v', 'main',
                 '-level', '4.1',
                 '-pix_fmt', 'yuv420p',
@@ -245,7 +250,9 @@ def build_unified_compilation_command(
             cmd.extend([
                 '-c:v', 'libx264',
                 '-preset', 'medium',
-                '-crf', '20',
+                '-crf', '23',
+                '-maxrate', '9M',
+                '-bufsize', '12M',
                 '-profile:v', 'main',
                 '-level', '4.1',
                 '-pix_fmt', 'yuv420p',

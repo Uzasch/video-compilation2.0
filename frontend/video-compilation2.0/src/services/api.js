@@ -11,15 +11,20 @@ const apiClient = axios.create({
   }
 })
 
-// Add user_id to requests if logged in
+// Add user_id to requests if logged in (except admin endpoints which show all users)
 apiClient.interceptors.request.use((config) => {
   const user = JSON.parse(localStorage.getItem('user') || 'null')
 
   if (user?.id) {
-    // Add user_id as query param (backend expects this)
-    config.params = {
-      ...config.params,
-      user_id: user.id
+    // Skip adding user_id for admin endpoints (they should show all users' data)
+    const isAdminEndpoint = config.url?.startsWith('/admin')
+
+    if (!isAdminEndpoint) {
+      // Add user_id as query param (backend expects this)
+      config.params = {
+        ...config.params,
+        user_id: user.id
+      }
     }
   }
 

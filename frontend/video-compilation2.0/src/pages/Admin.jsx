@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd'
 import { toast } from 'sonner'
@@ -395,6 +396,7 @@ function WorkerStatus({ workersData, isLoading }) {
 
 // ==================== JOB HISTORY TABLE ====================
 function JobHistoryTable({ channelsData }) {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('all')
   const [channelFilter, setChannelFilter] = useState('all')
@@ -560,7 +562,11 @@ function JobHistoryTable({ channelsData }) {
                   const StatusIcon = config.icon
 
                   return (
-                    <TableRow key={job.job_id}>
+                    <TableRow
+                      key={job.job_id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => navigate(`/compilation/${job.job_id}`)}
+                    >
                       <TableCell className="font-medium">
                         <div className="flex items-center gap-2">
                           {job.channel_name}

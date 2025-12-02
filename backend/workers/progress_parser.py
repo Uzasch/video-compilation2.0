@@ -66,7 +66,9 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
 
     last_progress = 0
     last_prefetch_check = 0  # Track when we last checked for prefetch
+    last_cancel_check = 0  # Track when we last checked for cancellation
     stderr_lines = []  # Collect all stderr for full error reporting
+    cancelled = False  # Flag to track if job was cancelled
 
     # Import prefetch function
     prefetch_func = None
@@ -101,6 +103,20 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
                 except Exception as e:
                     logger.error(f"Failed to update progress: {e}")
 
+                # Check for cancellation every 5% progress
+                if progress >= last_cancel_check + 5:
+                    try:
+                        job_status = supabase.table('jobs').select('status').eq('job_id', job_id).single().execute()
+                        if job_status.data and job_status.data.get('status') == 'cancelled':
+                            logger.warning(f"Job cancelled by user at {progress}% - terminating FFmpeg")
+                            process.terminate()
+                            process.wait(timeout=5)  # Wait up to 5 seconds for graceful termination
+                            cancelled = True
+                            break
+                        last_cancel_check = progress
+                    except Exception as e:
+                        logger.warning(f"  Cancel check failed: {e}")
+
                 # Check for new jobs to prefetch every 20% progress (separate from DB update)
                 if prefetch_func and progress >= last_prefetch_check + 20:
                     try:
@@ -109,6 +125,13 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
                         last_prefetch_check = progress
                     except Exception as e:
                         logger.warning(f"  Prefetch check failed: {e}")
+
+    # If cancelled, clean up and raise exception
+    if cancelled:
+        # Try to kill if still running
+        if process.poll() is None:
+            process.kill()
+        raise Exception("Job cancelled by user")
 
     # Wait for process to complete
     returncode = process.wait()

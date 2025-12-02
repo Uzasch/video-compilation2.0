@@ -167,10 +167,10 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
     job = job_result.data[0]
 
-    # Idempotency check: Skip if job already completed (prevents duplicate processing from task redelivery)
-    if job.get('status') == 'completed':
-        logging.info(f"Job {job_id} already completed, skipping duplicate execution (task redelivery)")
-        return {"status": "skipped", "reason": "already_completed", "job_id": job_id}
+    # Idempotency check: Skip if job already completed or cancelled (prevents duplicate processing from task redelivery)
+    if job.get('status') in ['completed', 'cancelled']:
+        logging.info(f"Job {job_id} already {job.get('status')}, skipping execution")
+        return {"status": "skipped", "reason": f"already_{job.get('status')}", "job_id": job_id}
 
     user_id = job.get('user_id', 'unknown')
 
@@ -461,16 +461,25 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         }
 
     except Exception as e:
-        logger.error(f"=== Job Failed ===")
-        logger.error(f"Error: {str(e)}")
+        error_msg = str(e)
+        is_cancelled = "cancelled by user" in error_msg.lower()
 
-        # Update job as failed
-        supabase.table('jobs').update({
-            'status': 'failed',
-            'progress_message': 'Failed',
-            'error_message': str(e),
-            'completed_at': datetime.utcnow().isoformat()
-        }).eq('job_id', job_id).execute()
+        if is_cancelled:
+            logger.warning(f"=== Job Cancelled ===")
+            logger.warning(f"Job was cancelled by user during processing")
+            logger.info(f"Cleaning up temp files for cancelled job {job_id}")
+            # Don't update status - it's already set to 'cancelled' by the cancel endpoint
+        else:
+            logger.error(f"=== Job Failed ===")
+            logger.error(f"Error: {error_msg}")
+
+            # Update job as failed (only if not cancelled)
+            supabase.table('jobs').update({
+                'status': 'failed',
+                'progress_message': 'Failed',
+                'error_message': error_msg,
+                'completed_at': datetime.utcnow().isoformat()
+            }).eq('job_id', job_id).execute()
 
         # Cleanup
         try:
@@ -479,6 +488,6 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             pass
 
         return {
-            "status": "failed",
-            "error": str(e)
+            "status": "cancelled" if is_cancelled else "failed",
+            "error": error_msg
         }
