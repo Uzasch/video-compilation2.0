@@ -282,6 +282,12 @@ def copy_file_sequential(
 
         Output: "temp/abc-123/video_001.mp4"
     """
+    # Log parameters for debugging
+    logger.info(f"copy_file_sequential called:")
+    logger.info(f"  source_path: {source_path}")
+    logger.info(f"  dest_dir: {dest_dir}")
+    logger.info(f"  dest_filename: {dest_filename}")
+
     # Normalize source path
     normalized_source = normalize_paths([source_path])[0]
     source_file_path = Path(normalized_source)
@@ -293,8 +299,10 @@ def copy_file_sequential(
     # Build dest_file path with consistent slashes (avoid Path / operator mixing slashes)
     if dest_filename:
         filename = dest_filename
+        logger.info(f"  Using provided dest_filename: {filename}")
     else:
         filename = source_file_path.name
+        logger.info(f"  Using source filename: {filename}")
 
     # Use appropriate separator based on path type
     if dest_dir.startswith('\\\\'):
@@ -382,21 +390,40 @@ def _copy_with_rsync(source: str, dest: Path) -> Optional[str]:
 
         logger.info(f"File size: {file_size_gb:.2f} GB, timeout: {io_timeout}s")
 
+        # Ensure dest is a full file path, not a directory
+        dest_str = str(dest)
+        logger.info(f"rsync dest path: {dest_str}")
+        logger.info(f"rsync dest name: {dest.name}")
+
         cmd = [
             "rsync",
             f"--timeout={io_timeout}",  # Dynamic I/O timeout based on file size
             "--no-compress",            # Don't compress (video files are already compressed)
             "--whole-file",             # Copy entire file (faster for large files, no delta transfer)
             source,
-            str(dest)
+            dest_str
         ]
 
-        logger.info(f"Copying with rsync: {source} → {dest}")
+        logger.info(f"Copying with rsync: {source} → {dest_str}")
+        logger.info(f"rsync command: {' '.join(cmd)}")
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=process_timeout)
 
         if result.returncode == 0:
-            logger.info(f"✓ rsync successful: {dest}")
-            return str(dest)
+            # Verify the file was created with correct name
+            if dest.exists():
+                logger.info(f"✓ rsync successful: {dest_str}")
+                return dest_str
+            else:
+                # Check if file was created with wrong name (rsync bug with directories)
+                parent_dir = dest.parent
+                source_name = Path(source).name
+                wrong_dest = parent_dir / source_name
+                if wrong_dest.exists():
+                    logger.warning(f"rsync created file with source name, renaming: {wrong_dest} → {dest}")
+                    wrong_dest.rename(dest)
+                    return dest_str
+                logger.warning(f"rsync returned success but file not found: {dest_str}")
+                return None
         else:
             logger.warning(f"rsync failed (code {result.returncode}): {result.stderr}")
             return None
@@ -482,9 +509,24 @@ def _copy_with_shutil(source: str, dest: Path) -> Optional[str]:
     """Copy file using shutil (cross-platform fallback)"""
     try:
         logger.info(f"Copying with shutil: {source} → {dest}")
+        logger.info(f"shutil dest name: {dest.name}")
         shutil.copy(source, dest)  # copy() not copy2() - no metadata
-        logger.info(f"✓ shutil copy successful: {dest}")
-        return str(dest)
+
+        # Verify the file was created with correct name
+        if dest.exists():
+            logger.info(f"✓ shutil copy successful: {dest}")
+            return str(dest)
+        else:
+            # Check if shutil created file with wrong name
+            parent_dir = dest.parent
+            source_name = Path(source).name
+            wrong_dest = parent_dir / source_name
+            if wrong_dest.exists():
+                logger.warning(f"shutil created file with source name, renaming: {wrong_dest} → {dest}")
+                wrong_dest.rename(dest)
+                return str(dest)
+            logger.warning(f"shutil reported success but file not found: {dest}")
+            return None
 
     except Exception as e:
         logger.error(f"✗ shutil copy failed {source}: {e}", exc_info=True)

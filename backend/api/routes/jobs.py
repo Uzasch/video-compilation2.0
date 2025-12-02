@@ -654,16 +654,33 @@ async def move_to_production(job_id: str, request: MoveToProductionRequest):
 
         # Start copy in background (fire and forget)
         job_logger.info("Starting background copy...")
+        job_logger.info(f"  copy_file_sequential params:")
+        job_logger.info(f"    source: {str(temp_path)}")
+        job_logger.info(f"    dest_dir: {str(production_dir)}")
+        job_logger.info(f"    dest_filename: {production_filename}")
 
         async def copy_and_update():
             try:
+                job_logger.info(f"Executing copy with filename: {production_filename}")
                 result = await asyncio.to_thread(
                     copy_file_sequential,
                     str(temp_path),
                     str(production_dir),
                     production_filename
                 )
+                job_logger.info(f"Copy result: {result}")
                 if result:
+                    # Verify the file exists with correct name
+                    import os
+                    expected_path = f"{production_dir}/{production_filename}"
+                    if os.path.exists(expected_path):
+                        job_logger.info(f"Verified: File exists at {expected_path}")
+                    else:
+                        job_logger.warning(f"WARNING: Expected file not found at {expected_path}")
+                        # List files in directory
+                        files = os.listdir(str(production_dir))
+                        job_logger.info(f"Files in {production_dir}: {files}")
+
                     # Update database after copy completes
                     supabase.table('jobs').update({
                         'production_path': str(production_path),
@@ -909,14 +926,14 @@ async def cancel_job(job_id: str):
                 detail=f"Cannot cancel job with status '{job['status']}'. Only queued or processing jobs can be cancelled."
             )
 
-        # If processing, revoke the Celery task
+        # Revoke the Celery task (for both queued and processing jobs)
         task_revoked = False
-        if job['status'] == 'processing' and job.get('task_id'):
+        if job.get('task_id'):
             try:
-                # Revoke with terminate=True to kill the running process (FFmpeg)
+                # Revoke with terminate=True to kill running process, or remove from queue if queued
                 celery_app.control.revoke(job['task_id'], terminate=True, signal='SIGTERM')
                 task_revoked = True
-                logger.info(f"Revoked Celery task {job['task_id']} for job {job_id}")
+                logger.info(f"Revoked Celery task {job['task_id']} for job {job_id} (was {job['status']})")
             except Exception as e:
                 logger.warning(f"Failed to revoke task {job['task_id']}: {e}")
 
@@ -931,6 +948,7 @@ async def cancel_job(job_id: str):
         from services.storage import cleanup_temp_dir
         try:
             cleanup_temp_dir(job_id)
+            logger.info(f"Cleaned up temp files for cancelled job {job_id}")
         except Exception as e:
             logger.warning(f"Failed to cleanup temp dir for {job_id}: {e}")
 
