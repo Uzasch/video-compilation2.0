@@ -39,6 +39,7 @@ temp.txt
 uploads/
 adobe_preset/
 test/
+test_gpu/
 
 # IDE and Editor files
 .vscode/
