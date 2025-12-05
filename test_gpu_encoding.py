@@ -27,7 +27,7 @@ LOG_FILE = OUTPUT_DIR / f"benchmark_results_{datetime.now().strftime('%Y%m%d_%H%
 
 # Test configurations
 PRESETS_GPU = ['p1', 'p3', 'p5']  # NVENC presets (p1=fastest, skip p7 - too slow)
-PRESETS_CPU = ['ultrafast']  # x264 presets - only ultrafast, others too slow for 4K
+PRESETS_CPU = []  # Skip CPU tests - GPU only
 
 class BenchmarkLogger:
     def __init__(self, log_file):
@@ -712,49 +712,35 @@ def main():
                 test_video, logger, use_gpu=True, preset=preset
             )
 
-    # 3. PNG overlay benchmarks
-    if overlay_png:
+    # 3. PNG overlay benchmarks (GPU only)
+    if overlay_png and has_nvenc:
         logger.log("\n" + "=" * 50)
-        logger.log("PNG OVERLAY BENCHMARKS")
+        logger.log("PNG OVERLAY BENCHMARKS (GPU)")
         logger.log("=" * 50)
 
-        all_results['benchmarks']['overlay_cpu_fast'] = benchmark_with_png_overlay(
-            test_video, overlay_png, logger, use_gpu=False, preset='fast'
+        all_results['benchmarks']['overlay_gpu_p3'] = benchmark_with_png_overlay(
+            test_video, overlay_png, logger, use_gpu=True, preset='p3'
         )
 
-        if has_nvenc:
-            all_results['benchmarks']['overlay_gpu_p3'] = benchmark_with_png_overlay(
-                test_video, overlay_png, logger, use_gpu=True, preset='p3'
-            )
-
-    # 4. Text overlay benchmarks
-    logger.log("\n" + "=" * 50)
-    logger.log("TEXT OVERLAY BENCHMARKS (drawtext)")
-    logger.log("=" * 50)
-
-    all_results['benchmarks']['text_cpu_fast'] = benchmark_with_text_overlay(
-        test_video, logger, use_gpu=False, preset='fast'
-    )
-
+    # 4. Filter benchmarks (GPU only)
     if has_nvenc:
-        all_results['benchmarks']['text_gpu_p3'] = benchmark_with_text_overlay(
+        logger.log("\n" + "=" * 50)
+        logger.log("FILTER BENCHMARKS (GPU)")
+        logger.log("=" * 50)
+
+        all_results['benchmarks']['filter_gpu_p3'] = benchmark_with_text_overlay(
             test_video, logger, use_gpu=True, preset='p3'
         )
 
-    # 5. Combined filter benchmarks
-    if overlay_png:
+    # 5. Combined filter benchmarks (GPU only)
+    if overlay_png and has_nvenc:
         logger.log("\n" + "=" * 50)
-        logger.log("COMBINED FILTER BENCHMARKS (overlay + text)")
+        logger.log("COMBINED FILTER BENCHMARKS (GPU)")
         logger.log("=" * 50)
 
-        all_results['benchmarks']['combined_cpu_fast'] = benchmark_combined_filters(
-            test_video, overlay_png, logger, use_gpu=False, preset='fast'
+        all_results['benchmarks']['combined_gpu_p3'] = benchmark_combined_filters(
+            test_video, overlay_png, logger, use_gpu=True, preset='p3'
         )
-
-        if has_nvenc:
-            all_results['benchmarks']['combined_gpu_p3'] = benchmark_combined_filters(
-                test_video, overlay_png, logger, use_gpu=True, preset='p3'
-            )
 
     # ==================== SUMMARY ====================
 
