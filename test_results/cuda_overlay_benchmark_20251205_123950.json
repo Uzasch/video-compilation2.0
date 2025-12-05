@@ -1,0 +1,70 @@
+{
+  "timestamp": "2025-12-05T12:38:24.995440",
+  "gpu_info": {
+    "name": "NVIDIA GeForce RTX 5060 Ti",
+    "driver": "581.57",
+    "pcie_gen": "1",
+    "pcie_width": "8"
+  },
+  "video_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4",
+  "overlay_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\ABC_English.png",
+  "target_resolution": "1920x1080",
+  "tests": [
+    {
+      "name": "Full GPU (no overlay - baseline)",
+      "success": true,
+      "elapsed_seconds": 9.15,
+      "speed": 13.1,
+      "output_size_mb": 111.25,
+      "return_code": 0
+    },
+    {
+      "name": "CPU Filters + GPU Encode",
+      "success": true,
+      "elapsed_seconds": 15.86,
+      "speed": 7.43,
+      "output_size_mb": 110.9,
+      "return_code": 0
+    },
+    {
+      "name": "GPU Decode + CPU Filters + GPU Encode",
+      "success": true,
+      "elapsed_seconds": 34.55,
+      "speed": 3.41,
+      "output_size_mb": 110.88,
+      "return_code": 0
+    },
+    {
+      "name": "CUDA Scale + CPU Overlay + GPU Encode",
+      "success": true,
+      "elapsed_seconds": 15.43,
+      "speed": 7.77,
+      "output_size_mb": 111.46,
+      "return_code": 0
+    },
+    {
+      "name": "Full CUDA Pipeline (overlay_cuda)",
+      "success": true,
+      "elapsed_seconds": 5.01,
+      "speed": 25.5,
+      "output_size_mb": 4.92,
+      "return_code": 0
+    },
+    {
+      "name": "Full CUDA with pad_cuda + overlay_cuda",
+      "success": true,
+      "elapsed_seconds": 5.02,
+      "speed": 26.0,
+      "output_size_mb": 4.9,
+      "return_code": 0
+    },
+    {
+      "name": "NPP Scale + overlay_cuda",
+      "success": false,
+      "elapsed_seconds": 0.23,
+      "speed": null,
+      "output_size_mb": 0,
+      "return_code": 4294967274
+    }
+  ]
+}

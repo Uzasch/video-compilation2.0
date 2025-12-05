@@ -19,9 +19,9 @@ from pathlib import Path
 from datetime import datetime
 
 # Test configuration
-TEST_GPU_DIR = Path(r"C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu")
+TEST_GPU_DIR = Path(r"C:\Users\uzair\softwares\video-compilation-2.0\test_gpu")
 OUTPUT_DIR = TEST_GPU_DIR / "cuda_test_output"
-RESULTS_DIR = Path(r"C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_results")
+RESULTS_DIR = Path(r"C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\test_results")
 
 # Find test files
 VIDEO_FILE = TEST_GPU_DIR / "ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4"
