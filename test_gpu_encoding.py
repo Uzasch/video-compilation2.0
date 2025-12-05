@@ -26,8 +26,8 @@ OUTPUT_DIR = TEST_DIR
 LOG_FILE = OUTPUT_DIR / f"benchmark_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
 # Test configurations
-PRESETS_GPU = ['p1', 'p3', 'p5', 'p7']  # NVENC presets (p1=fastest, p7=slowest/best quality)
-PRESETS_CPU = ['ultrafast', 'fast', 'medium']  # x264 presets
+PRESETS_GPU = ['p1', 'p3', 'p5']  # NVENC presets (p1=fastest, skip p7 - too slow)
+PRESETS_CPU = ['ultrafast']  # x264 presets - only ultrafast, others too slow for 4K
 
 class BenchmarkLogger:
     def __init__(self, log_file):
@@ -287,19 +287,18 @@ def benchmark_with_png_overlay(video_path, overlay_path, logger, use_gpu=True, p
 
 
 def benchmark_with_text_overlay(video_path, logger, use_gpu=True, preset='p3'):
-    """Test encoding with drawtext filter"""
+    """Test encoding with color adjustment filter (simpler than drawtext)"""
     output = OUTPUT_DIR / f"test_text_{'gpu' if use_gpu else 'cpu'}_{preset}.mp4"
 
-    # Text overlay with timestamp and custom text - use Windows font path
-    font_path = "C\\\\:/Windows/Fonts/arial.ttf"
-    drawtext = f"drawtext=text='BENCHMARK TEST':fontfile='{font_path}':fontsize=48:fontcolor=white:x=50:y=50:box=1:boxcolor=black@0.5"
+    # Use eq filter instead of drawtext to avoid font issues
+    filter_str = "eq=brightness=0.02:contrast=1.1"
 
     if use_gpu:
         cmd = [
             'ffmpeg', '-y',
             '-hwaccel', 'cuda',
             '-i', str(video_path),
-            '-vf', drawtext,
+            '-vf', filter_str,
             '-c:v', 'h264_nvenc',
             '-preset', preset,
             '-rc', 'vbr', '-cq', '23',
@@ -311,7 +310,7 @@ def benchmark_with_text_overlay(video_path, logger, use_gpu=True, preset='p3'):
         cmd = [
             'ffmpeg', '-y',
             '-i', str(video_path),
-            '-vf', drawtext,
+            '-vf', filter_str,
             '-c:v', 'libx264',
             '-preset', preset,
             '-crf', '23',
@@ -320,7 +319,7 @@ def benchmark_with_text_overlay(video_path, logger, use_gpu=True, preset='p3'):
             str(output)
         ]
 
-    result = run_ffmpeg_benchmark(cmd, f"Text overlay ({'GPU' if use_gpu else 'CPU'}, preset={preset})", logger)
+    result = run_ffmpeg_benchmark(cmd, f"Filter test ({'GPU' if use_gpu else 'CPU'}, preset={preset})", logger)
     result['output_file'] = str(output)
     result['encoder'] = 'h264_nvenc' if use_gpu else 'libx264'
     result['preset'] = preset
@@ -333,12 +332,11 @@ def benchmark_with_text_overlay(video_path, logger, use_gpu=True, preset='p3'):
 
 
 def benchmark_combined_filters(video_path, overlay_path, logger, use_gpu=True, preset='p3'):
-    """Test encoding with both PNG and text overlay"""
+    """Test encoding with both PNG overlay and color filter"""
     output = OUTPUT_DIR / f"test_combined_{'gpu' if use_gpu else 'cpu'}_{preset}.mp4"
 
-    # Complex filter: overlay + drawtext - use Windows font path
-    font_path = "C\\\\:/Windows/Fonts/arial.ttf"
-    filter_complex = f"[0:v][1:v]overlay=10:10,drawtext=text='BENCHMARK TEST':fontfile='{font_path}':fontsize=48:fontcolor=white:x=50:y=150:box=1:boxcolor=black@0.5"
+    # Complex filter: overlay + color adjustment (avoids font issues)
+    filter_complex = "[0:v][1:v]overlay=10:10,eq=brightness=0.02"
 
     if use_gpu:
         cmd = [
@@ -536,15 +534,12 @@ def test_bottleneck_diagnosis(video_path, logger):
     logger.log("\n[E] COMPLEX FILTER TEST (forces CPU-GPU sync)")
     logger.log("    If much slower: CPU-GPU data transfer is bottleneck")
 
-    # Use Windows system font to avoid fontconfig issues
-    font_path = "C\\\\:/Windows/Fonts/arial.ttf"
-    drawtext_filter = f"drawtext=text='Test':fontfile='{font_path}':fontsize=24:x=10:y=10"
-
+    # Use scale + color filter instead of drawtext to avoid font issues
     cmd = [
         'ffmpeg', '-y',
         '-hwaccel', 'cuda',
         '-i', str(video_path),
-        '-vf', f'scale=1920:1080,{drawtext_filter}',
+        '-vf', 'scale=1920:1080,eq=brightness=0.01',
         '-c:v', 'h264_nvenc', '-preset', 'p3',
         '-c:a', 'copy',
         '-f', 'null', '-'
