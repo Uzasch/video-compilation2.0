@@ -290,8 +290,9 @@ def benchmark_with_text_overlay(video_path, logger, use_gpu=True, preset='p3'):
     """Test encoding with drawtext filter"""
     output = OUTPUT_DIR / f"test_text_{'gpu' if use_gpu else 'cpu'}_{preset}.mp4"
 
-    # Text overlay with timestamp and custom text
-    drawtext = "drawtext=text='BENCHMARK TEST':fontsize=48:fontcolor=white:x=50:y=50:box=1:boxcolor=black@0.5"
+    # Text overlay with timestamp and custom text - use Windows font path
+    font_path = "C\\\\:/Windows/Fonts/arial.ttf"
+    drawtext = f"drawtext=text='BENCHMARK TEST':fontfile='{font_path}':fontsize=48:fontcolor=white:x=50:y=50:box=1:boxcolor=black@0.5"
 
     if use_gpu:
         cmd = [
@@ -335,8 +336,9 @@ def benchmark_combined_filters(video_path, overlay_path, logger, use_gpu=True, p
     """Test encoding with both PNG and text overlay"""
     output = OUTPUT_DIR / f"test_combined_{'gpu' if use_gpu else 'cpu'}_{preset}.mp4"
 
-    # Complex filter: overlay + drawtext
-    filter_complex = "[0:v][1:v]overlay=10:10,drawtext=text='BENCHMARK TEST':fontsize=48:fontcolor=white:x=50:y=150:box=1:boxcolor=black@0.5"
+    # Complex filter: overlay + drawtext - use Windows font path
+    font_path = "C\\\\:/Windows/Fonts/arial.ttf"
+    filter_complex = f"[0:v][1:v]overlay=10:10,drawtext=text='BENCHMARK TEST':fontfile='{font_path}':fontsize=48:fontcolor=white:x=50:y=150:box=1:boxcolor=black@0.5"
 
     if use_gpu:
         cmd = [
@@ -533,11 +535,16 @@ def test_bottleneck_diagnosis(video_path, logger):
     # Test E: With complex filter (forces CPU-GPU transfers)
     logger.log("\n[E] COMPLEX FILTER TEST (forces CPU-GPU sync)")
     logger.log("    If much slower: CPU-GPU data transfer is bottleneck")
+
+    # Use Windows system font to avoid fontconfig issues
+    font_path = "C\\\\:/Windows/Fonts/arial.ttf"
+    drawtext_filter = f"drawtext=text='Test':fontfile='{font_path}':fontsize=24:x=10:y=10"
+
     cmd = [
         'ffmpeg', '-y',
         '-hwaccel', 'cuda',
         '-i', str(video_path),
-        '-vf', 'scale=1920:1080,drawtext=text=Test:fontsize=24:x=10:y=10',
+        '-vf', f'scale=1920:1080,{drawtext_filter}',
         '-c:v', 'h264_nvenc', '-preset', 'p3',
         '-c:a', 'copy',
         '-f', 'null', '-'
