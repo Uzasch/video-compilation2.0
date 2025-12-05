@@ -8,7 +8,8 @@ import subprocess
 import os
 from pathlib import Path
 
-TEST_GPU_DIR = Path(r"C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu")
+TEST_GPU_DIR = Path(r"C:\Users\uzair\softwares\video-compilation-2.0\test_gpu")
+
 OUTPUT_DIR = TEST_GPU_DIR / "debug_output"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 

@@ -1,0 +1,584 @@
+PS C:\Users\uzair\softwares\video-compilation-2.0> python debug_cuda_overlay.py
+======================================================================
+DEBUGGING overlay_cuda ISSUES
+======================================================================
+
+======================================================================
+PNG FILE INFO
+======================================================================
+PNG info: png,1920,1080,rgba
+File size: 80.5 KB
+
+======================================================================
+overlay_cuda FILTER OPTIONS
+======================================================================
+Filter overlay_cuda
+  Overlay one video on top of another using CUDA
+    Inputs:
+       #0: main (video)
+       #1: overlay (video)
+    Outputs:
+       #0: default (video)
+overlay_cuda AVOptions:
+   x                 <string>     ..FV....... set the x expression of overlay (default "0")
+   y                 <string>     ..FV....... set the y expression of overlay (default "0")
+   eof_action        <int>        ..FV....... Action to take when encountering EOF from secondary input  (from 0 to 2) (default repeat)
+     repeat          0            ..FV....... Repeat the previous frame.
+     endall          1            ..FV....... End both streams.
+     pass            2            ..FV....... Pass through the main input.
+   eval              <int>        ..FV....... specify when to evaluate expressions (from 0 to 1) (default frame)
+     init            0            ..FV....... eval expressions once during initialization
+     frame           1            ..FV....... eval expressions per-frame
+   shortest          <boolean>    ..FV....... force termination when the shortest input terminates (default false)
+   repeatlast        <boolean>    ..FV....... repeat overlay of the last overlay frame (default true)
+
+framesync AVOptions:
+   eof_action        <int>        ..FV....... Action to take when encountering EOF from secondary input  (from 0 to 2) (default repeat)
+     repeat          0            ..FV....... Repeat the previous frame.
+     endall          1            ..FV....... End both streams.
+     pass            2            ..FV....... Pass through the main input.
+   shortest          <boolean>    ..FV....... force termination when the shortest input terminates (default false)
+   repeatlast        <boolean>    ..FV....... extend last frame of secondary streams beyond EOF (default true)
+   ts_sync_mode      <int>        ..FV....... How strictly to sync streams based on secondary input timestamps (from 0 to 1) (default default)
+     default         0            ..FV....... Frame from secondary input with the nearest lower or equal timestamp to the primary input frame
+     nearest         1            ..FV....... Frame from secondary input with the absolute nearest timestamp to the primary input frame
+
+This filter has support for timeline through the 'enable' option.
+
+Exiting with exit code 0
+
+
+======================================================================
+TEST: Baseline: scale_cuda only (no overlay)
+======================================================================
+Command:
+ffmpeg -y -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -vf scale_cuda=1920:1080:format=nv12 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test1_baseline.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+ersion   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0(eng): Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1080 [SAR 1:1 DAR 16:9], q=2-31, 25 fps, 12800 tbn (default)
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : ?Mainconcept Video Media Handler
+      vendor_id       : [0][0][0][0]
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  266 fps=0.0 q=20.0 size=   11520KiB time=00:00:10.60 bitrate=8903.0kbits/s speed=20.5x elapsed=0:00:00.51
+frame=  614 fps=603 q=19.0 size=   27648KiB time=00:00:24.52 bitrate=9237.1kbits/s speed=24.1x elapsed=0:00:01.01
+frame=  982 fps=639 q=17.0 size=   39680KiB time=00:00:39.24 bitrate=8283.9kbits/s speed=25.5x elapsed=0:00:01.53
+frame= 1335 fps=650 q=18.0 size=   52480KiB time=00:00:53.36 bitrate=8056.9kbits/s speed=  26x elapsed=0:00:02.05
+frame= 1693 fps=659 q=19.0 size=   65024KiB time=00:01:07.68 bitrate=7870.5kbits/s speed=26.4x elapsed=0:00:02.56
+frame= 2048 fps=664 q=18.0 size=   79872KiB time=00:01:21.88 bitrate=7991.1kbits/s speed=26.5x elapsed=0:00:03.08
+frame= 2416 fps=671 q=17.0 size=   92416KiB time=00:01:36.60 bitrate=7837.2kbits/s speed=26.8x elapsed=0:00:03.60
+frame= 2746 fps=666 q=19.0 size=  108544KiB time=00:01:49.80 bitrate=8098.3kbits/s speed=26.6x elapsed=0:00:04.12
+[out#0/mp4 @ 000002737ae42b00] video:109324KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.077303%
+frame= 2907 fps=670 q=16.0 Lsize=  113917KiB time=00:01:56.24 bitrate=8028.3kbits/s speed=26.8x elapsed=0:00:04.33
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test1_baseline.mp4
+Size: 111.25 MB
+Video info: 1920,1080,116.280000,2907
+
+======================================================================
+TEST: hwdownload + CPU overlay (known working)
+======================================================================
+Command:
+ffmpeg -y -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=nv12,hwdownload,format=nv12[base];[1:v]scale=1920:1080[logo];[base][logo]overlay=(W-w)/2:(H-h)/2 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test5_hwdownload_overlay.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+e=   55552KiB time=00:00:56.84 bitrate=8006.4kbits/s speed=7.89x elapsed=0:00:07.20
+frame= 1526 fps=198 q=18.0 size=   59136KiB time=00:01:01.00 bitrate=7941.7kbits/s speed= 7.9x elapsed=0:00:07.72
+frame= 1631 fps=198 q=17.0 size=   62720KiB time=00:01:05.20 bitrate=7880.4kbits/s speed=7.91x elapsed=0:00:08.23
+frame= 1735 fps=198 q=23.0 size=   67072KiB time=00:01:09.36 bitrate=7921.8kbits/s speed=7.92x elapsed=0:00:08.75
+frame= 1839 fps=198 q=21.0 size=   71936KiB time=00:01:13.52 bitrate=8015.5kbits/s speed=7.93x elapsed=0:00:09.27
+frame= 1940 fps=198 q=19.0 size=   75264KiB time=00:01:17.56 bitrate=7949.5kbits/s speed=7.93x elapsed=0:00:09.77
+frame= 2046 fps=199 q=18.0 size=   79872KiB time=00:01:21.80 bitrate=7998.9kbits/s speed=7.95x elapsed=0:00:10.29
+frame= 2150 fps=199 q=17.0 size=   83968KiB time=00:01:25.96 bitrate=8002.2kbits/s speed=7.95x elapsed=0:00:10.81
+frame= 2251 fps=199 q=17.0 size=   86784KiB time=00:01:30.00 bitrate=7899.3kbits/s speed=7.94x elapsed=0:00:11.32
+frame= 2356 fps=199 q=18.0 size=   91392KiB time=00:01:34.20 bitrate=7947.8kbits/s speed=7.95x elapsed=0:00:11.84
+frame= 2459 fps=199 q=26.0 size=   95488KiB time=00:01:38.32 bitrate=7956.0kbits/s speed=7.95x elapsed=0:00:12.36
+frame= 2564 fps=199 q=18.0 size=   99840KiB time=00:01:42.52 bitrate=7977.9kbits/s speed=7.96x elapsed=0:00:12.88
+frame= 2669 fps=199 q=18.0 size=  103936KiB time=00:01:46.72 bitrate=7978.3kbits/s speed=7.96x elapsed=0:00:13.40
+frame= 2771 fps=199 q=21.0 size=  110336KiB time=00:01:50.80 bitrate=8157.7kbits/s speed=7.96x elapsed=0:00:13.91
+frame= 2876 fps=199 q=16.0 size=  113152KiB time=00:01:55.00 bitrate=8060.4kbits/s speed=7.97x elapsed=0:00:14.43
+[out#0/mp4 @ 0000019a980c0c00] video:109543KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.077137%
+frame= 2907 fps=199 q=17.0 Lsize=  114136KiB time=00:01:56.24 bitrate=8043.7kbits/s speed=7.97x elapsed=0:00:14.57
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test5_hwdownload_overlay.mp4
+Size: 111.46 MB
+Video info: 1920,1080,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda simple (original failing)
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]format=nv12,hwupload[logo];[base][logo]overlay_cuda=(W-w)/2:(H-h)/2 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test2_overlay_cuda_simple.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+0, mp4, to 'C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test2_overlay_cuda_simple.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  212 fps=0.0 q=16.0 size=     256KiB time=00:00:08.44 bitrate= 248.5kbits/s speed=16.7x elapsed=0:00:00.50
+frame=  569 fps=557 q=16.0 size=     768KiB time=00:00:22.72 bitrate= 276.9kbits/s speed=22.2x elapsed=0:00:01.02
+frame=  937 fps=609 q=16.0 size=    1536KiB time=00:00:37.44 bitrate= 336.1kbits/s speed=24.3x elapsed=0:00:01.53
+frame= 1289 fps=627 q=16.0 size=    2048KiB time=00:00:51.52 bitrate= 325.7kbits/s speed=  25x elapsed=0:00:02.05
+frame= 1641 fps=641 q=16.0 size=    2560KiB time=00:01:05.60 bitrate= 319.7kbits/s speed=25.6x elapsed=0:00:02.55
+frame= 1996 fps=649 q=16.0 size=    3328KiB time=00:01:19.80 bitrate= 341.6kbits/s speed=25.9x elapsed=0:00:03.07
+frame= 2364 fps=658 q=16.0 size=    3840KiB time=00:01:34.52 bitrate= 332.8kbits/s speed=26.3x elapsed=0:00:03.59
+frame= 2703 fps=657 q=16.0 size=    4608KiB time=00:01:48.08 bitrate= 349.3kbits/s speed=26.3x elapsed=0:00:04.11
+[out#0/mp4 @ 0000020e8ec626c0] video:463KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 1.770786%
+frame= 2907 fps=661 q=16.0 Lsize=    5056KiB time=00:01:56.24 bitrate= 356.3kbits/s speed=26.4x elapsed=0:00:04.40
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test2_overlay_cuda_simple.mp4
+Size: 4.94 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda with x=0:y=0
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]format=nv12,hwupload[logo];[base][logo]overlay_cuda=x=0:y=0 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test3_overlay_cuda_fixed.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+#0, mp4, to 'C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test3_overlay_cuda_fixed.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  215 fps=0.0 q=16.0 size=     256KiB time=00:00:08.56 bitrate= 245.0kbits/s speed=16.9x elapsed=0:00:00.50
+frame=  571 fps=558 q=16.0 size=     768KiB time=00:00:22.80 bitrate= 276.0kbits/s speed=22.3x elapsed=0:00:01.02
+frame=  939 fps=609 q=16.0 size=    1536KiB time=00:00:37.52 bitrate= 335.4kbits/s speed=24.3x elapsed=0:00:01.54
+frame= 1280 fps=626 q=16.0 size=    2048KiB time=00:00:51.16 bitrate= 327.9kbits/s speed=  25x elapsed=0:00:02.04
+frame= 1642 fps=641 q=16.0 size=    2560KiB time=00:01:05.64 bitrate= 319.5kbits/s speed=25.6x elapsed=0:00:02.56
+frame= 1998 fps=649 q=16.0 size=    3328KiB time=00:01:19.84 bitrate= 341.5kbits/s speed=25.9x elapsed=0:00:03.07
+frame= 2365 fps=658 q=16.0 size=    3840KiB time=00:01:34.56 bitrate= 332.7kbits/s speed=26.3x elapsed=0:00:03.59
+frame= 2704 fps=657 q=16.0 size=    4352KiB time=00:01:48.12 bitrate= 329.7kbits/s speed=26.3x elapsed=0:00:04.11
+[out#0/mp4 @ 000001637e6b87c0] video:422KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 1.785464%
+frame= 2907 fps=660 q=16.0 Lsize=    5015KiB time=00:01:56.24 bitrate= 353.4kbits/s speed=26.4x elapsed=0:00:04.40
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test3_overlay_cuda_fixed.mp4
+Size: 4.90 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda with scaled logo (200px wide)
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]scale=200:-1,format=nv12,hwupload[logo];[base][logo]overlay_cuda=x=10:y=10 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test4_overlay_cuda_scaled_logo.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+to 'C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test4_overlay_cuda_scaled_logo.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  205 fps=0.0 q=24.0 size=    7936KiB time=00:00:08.12 bitrate=8006.4kbits/s speed=16.1x elapsed=0:00:00.50
+frame=  563 fps=551 q=17.0 size=   24832KiB time=00:00:22.48 bitrate=9049.1kbits/s speed=  22x elapsed=0:00:01.02
+frame=  917 fps=602 q=16.0 size=   37120KiB time=00:00:36.64 bitrate=8299.3kbits/s speed=24.1x elapsed=0:00:01.52
+frame= 1268 fps=621 q=18.0 size=   49664KiB time=00:00:50.68 bitrate=8027.8kbits/s speed=24.8x elapsed=0:00:02.04
+frame= 1631 fps=638 q=17.0 size=   62464KiB time=00:01:05.20 bitrate=7848.2kbits/s speed=25.5x elapsed=0:00:02.55
+frame= 1984 fps=645 q=19.0 size=   77056KiB time=00:01:19.32 bitrate=7958.2kbits/s speed=25.8x elapsed=0:00:03.07
+frame= 2350 fps=654 q=18.0 size=   90624KiB time=00:01:33.96 bitrate=7901.2kbits/s speed=26.1x elapsed=0:00:03.59
+frame= 2689 fps=654 q=21.0 size=  105216KiB time=00:01:47.52 bitrate=8016.5kbits/s speed=26.2x elapsed=0:00:04.11
+[out#0/mp4 @ 000002108a99d5c0] video:108918KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.077561%
+frame= 2907 fps=652 q=16.0 Lsize=  113511KiB time=00:01:56.24 bitrate=7999.7kbits/s speed=26.1x elapsed=0:00:04.45
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test4_overlay_cuda_scaled_logo.mp4
+Size: 110.85 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda with yuv420p format
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=yuv420p[base];[1:v]format=yuv420p,hwupload[logo];[base][logo]overlay_cuda=x=10:y=10 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test7_overlay_cuda_yuv420p.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+ mp4, to 'C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test7_overlay_cuda_yuv420p.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  218 fps=0.0 q=16.0 size=     256KiB time=00:00:08.68 bitrate= 241.7kbits/s speed=17.1x elapsed=0:00:00.50
+frame=  579 fps=559 q=16.0 size=    1280KiB time=00:00:23.12 bitrate= 453.6kbits/s speed=22.3x elapsed=0:00:01.03
+frame=  949 fps=611 q=16.0 size=    2048KiB time=00:00:37.92 bitrate= 442.4kbits/s speed=24.4x elapsed=0:00:01.55
+frame= 1290 fps=628 q=16.0 size=    2816KiB time=00:00:51.56 bitrate= 447.4kbits/s speed=25.1x elapsed=0:00:02.05
+frame= 1652 fps=642 q=16.0 size=    3584KiB time=00:01:06.04 bitrate= 444.6kbits/s speed=25.7x elapsed=0:00:02.57
+frame= 2007 fps=649 q=16.0 size=    4352KiB time=00:01:20.24 bitrate= 444.3kbits/s speed=  26x elapsed=0:00:03.09
+frame= 2375 fps=658 q=16.0 size=    5120KiB time=00:01:34.96 bitrate= 441.7kbits/s speed=26.3x elapsed=0:00:03.60
+frame= 2713 fps=658 q=16.0 size=    6144KiB time=00:01:48.44 bitrate= 464.1kbits/s speed=26.3x elapsed=0:00:04.12
+[out#0/mp4 @ 000001d976115a00] video:2158KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 1.320332%
+frame= 2907 fps=660 q=16.0 Lsize=    6751KiB time=00:01:56.24 bitrate= 475.8kbits/s speed=26.4x elapsed=0:00:04.40
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test7_overlay_cuda_yuv420p.mp4
+Size: 6.59 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda no resize (keep 4K)
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=format=nv12[base];[1:v]scale=200:-1,format=nv12,hwupload[logo];[base][logo]overlay_cuda=x=10:y=10 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test8_overlay_cuda_no_scale.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+me=00:00:51.84 bitrate=24515.3kbits/s speed=8.41x elapsed=0:00:06.16
+frame= 1412 fps=211 q=16.0 size=  166400KiB time=00:00:56.44 bitrate=24152.2kbits/s speed=8.45x elapsed=0:00:06.68
+frame= 1526 fps=212 q=17.0 size=  177408KiB time=00:01:01.00 bitrate=23825.0kbits/s speed=8.47x elapsed=0:00:07.20
+frame= 1641 fps=213 q=17.0 size=  189440KiB time=00:01:05.60 bitrate=23656.9kbits/s speed= 8.5x elapsed=0:00:07.71
+frame= 1755 fps=213 q=20.0 size=  203520KiB time=00:01:10.16 bitrate=23763.3kbits/s speed=8.52x elapsed=0:00:08.23
+frame= 1870 fps=214 q=16.0 size=  217344KiB time=00:01:14.76 bitrate=23816.0kbits/s speed=8.54x elapsed=0:00:08.75
+frame= 1984 fps=214 q=17.0 size=  230656KiB time=00:01:19.32 bitrate=23821.7kbits/s speed=8.55x elapsed=0:00:09.27
+frame= 2098 fps=214 q=17.0 size=  243200KiB time=00:01:23.84 bitrate=23763.1kbits/s speed=8.56x elapsed=0:00:09.78
+frame= 2211 fps=215 q=16.0 size=  255488KiB time=00:01:28.40 bitrate=23676.0kbits/s speed=8.58x elapsed=0:00:10.30
+frame= 2325 fps=215 q=18.0 size=  267264KiB time=00:01:32.96 bitrate=23552.4kbits/s speed=8.59x elapsed=0:00:10.82
+frame= 2440 fps=215 q=16.0 size=  276224KiB time=00:01:37.56 bitrate=23194.2kbits/s speed= 8.6x elapsed=0:00:11.34
+frame= 2554 fps=215 q=17.0 size=  294400KiB time=00:01:42.08 bitrate=23625.8kbits/s speed=8.61x elapsed=0:00:11.86
+frame= 2664 fps=215 q=17.0 size=  308224KiB time=00:01:46.52 bitrate=23704.2kbits/s speed=8.61x elapsed=0:00:12.37
+frame= 2770 fps=215 q=19.0 size=  328704KiB time=00:01:50.76 bitrate=24311.5kbits/s speed=8.59x elapsed=0:00:12.89
+frame= 2883 fps=215 q=16.0 size=  337920KiB time=00:01:55.28 bitrate=24013.2kbits/s speed=8.59x elapsed=0:00:13.41
+[out#0/mp4 @ 00000248091cc580] video:335126KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.025903%
+frame= 2907 fps=215 q=16.0 Lsize=  339719KiB time=00:01:56.24 bitrate=23941.6kbits/s speed=8.59x elapsed=0:00:13.53
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test8_overlay_cuda_no_scale.mp4
+Size: 331.76 MB
+Video info: 3840,2160,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda with shortest=1
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]scale=200:-1,format=nv12,hwupload[logo];[base][logo]overlay_cuda=x=10:y=10:shortest=1 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test9_overlay_cuda_shortest.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+fps, 25 tbr, 25k tbn (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : ?Mainconcept Video Media Handler
+      vendor_id       : [0][0][0][0]
+      encoder         : AVC Coding
+  Stream #0:1[0x2](eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+Input #1, png_pipe, from 'C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png':
+  Duration: N/A, bitrate: N/A
+  Stream #1:0: Video: png, rgba(pc, gbr/unknown/unknown), 1920x1080 [SAR 1:1 DAR 16:9], 25 fps, 25 tbr, 25 tbn
+Stream mapping:
+  Stream #0:0 (h264) -> scale_cuda:default
+  Stream #1:0 (png) -> scale:default
+  overlay_cuda:default -> Stream #0:0 (h264_nvenc)
+  Stream #0:1 -> #0:1 (copy)
+Press [q] to stop, [?] for help
+Output #0, mp4, to 'C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test9_overlay_cuda_shortest.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+[out#0/mp4 @ 00000282cbfe2e80] video:110KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.492946%
+frame=    1 fps=0.0 q=19.0 Lsize=    4638KiB time=00:00:00.00 bitrate=N/A speed=   0x elapsed=0:00:00.29
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test9_overlay_cuda_shortest.mp4
+Size: 4.53 MB
+Video info: 1920,1088,0.040000,1
+
+======================================================================
+TEST: overlay_cuda with eof_action=repeat
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]scale=200:-1,format=nv12,hwupload[logo];[base][logo]overlay_cuda=x=10:y=10:eof_action=repeat -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test10_overlay_cuda_eof.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+, mp4, to 'C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test10_overlay_cuda_eof.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  241 fps=0.0 q=18.0 size=    8960KiB time=00:00:09.60 bitrate=7645.9kbits/s speed=18.5x elapsed=0:00:00.51
+frame=  584 fps=572 q=18.0 size=   26112KiB time=00:00:23.32 bitrate=9172.8kbits/s speed=22.9x elapsed=0:00:01.02
+frame=  952 fps=619 q=17.0 size=   38400KiB time=00:00:38.04 bitrate=8269.5kbits/s speed=24.7x elapsed=0:00:01.53
+frame= 1304 fps=634 q=18.0 size=   51200KiB time=00:00:52.12 bitrate=8047.4kbits/s speed=25.4x elapsed=0:00:02.05
+frame= 1665 fps=647 q=21.0 size=   63744KiB time=00:01:06.56 bitrate=7845.4kbits/s speed=25.9x elapsed=0:00:02.57
+frame= 2018 fps=653 q=19.0 size=   78336KiB time=00:01:20.68 bitrate=7954.0kbits/s speed=26.1x elapsed=0:00:03.09
+frame= 2387 fps=661 q=17.0 size=   91392KiB time=00:01:35.44 bitrate=7844.5kbits/s speed=26.4x elapsed=0:00:03.60
+frame= 2710 fps=657 q=22.0 size=  106496KiB time=00:01:48.36 bitrate=8051.1kbits/s speed=26.3x elapsed=0:00:04.12
+[out#0/mp4 @ 000001c78e952b80] video:108918KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.077561%
+frame= 2907 fps=653 q=16.0 Lsize=  113511KiB time=00:01:56.24 bitrate=7999.7kbits/s speed=26.1x elapsed=0:00:04.45
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test10_overlay_cuda_eof.mp4
+Size: 110.85 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda with -loop 1 on PNG
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -loop 1 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]scale=200:-1,format=nv12,hwupload[logo];[base][logo]overlay_cuda=x=10:y=10:shortest=1 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test11_loop_png.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+e=   33536KiB time=00:00:32.16 bitrate=8542.5kbits/s speed=8.95x elapsed=0:00:03.59
+frame=  953 fps=232 q=19.0 size=   38400KiB time=00:00:38.08 bitrate=8260.9kbits/s speed=9.26x elapsed=0:00:04.11
+frame= 1060 fps=229 q=17.0 size=   42752KiB time=00:00:42.36 bitrate=8267.8kbits/s speed=9.15x elapsed=0:00:04.62
+frame= 1173 fps=228 q=17.0 size=   45824KiB time=00:00:46.88 bitrate=8007.5kbits/s speed= 9.1x elapsed=0:00:05.15
+frame= 1348 fps=238 q=17.0 size=   52736KiB time=00:00:53.88 bitrate=8018.1kbits/s speed=9.53x elapsed=0:00:05.65
+frame= 1524 fps=247 q=18.0 size=   58624KiB time=00:01:00.92 bitrate=7883.3kbits/s speed=9.86x elapsed=0:00:06.18
+frame= 1658 fps=248 q=19.0 size=   63488KiB time=00:01:06.28 bitrate=7846.9kbits/s speed=9.91x elapsed=0:00:06.68
+frame= 1825 fps=253 q=21.0 size=   70912KiB time=00:01:12.96 bitrate=7962.1kbits/s speed=10.1x elapsed=0:00:07.20
+frame= 1962 fps=254 q=19.0 size=   76032KiB time=00:01:18.44 bitrate=7940.5kbits/s speed=10.2x elapsed=0:00:07.72
+frame= 2146 fps=260 q=17.0 size=   83200KiB time=00:01:25.80 bitrate=7943.8kbits/s speed=10.4x elapsed=0:00:08.24
+frame= 2200 fps=251 q=18.0 size=   85248KiB time=00:01:27.96 bitrate=7939.4kbits/s speed=  10x elapsed=0:00:08.76
+frame= 2330 fps=251 q=20.0 size=   89856KiB time=00:01:33.16 bitrate=7901.5kbits/s speed=  10x elapsed=0:00:09.27
+frame= 2422 fps=248 q=17.0 size=   92416KiB time=00:01:36.84 bitrate=7817.8kbits/s speed= 9.9x elapsed=0:00:09.78
+frame= 2564 fps=249 q=18.0 size=   99072KiB time=00:01:42.52 bitrate=7916.5kbits/s speed=9.95x elapsed=0:00:10.29
+frame= 2722 fps=252 q=20.0 size=  106752KiB time=00:01:48.84 bitrate=8034.8kbits/s speed=10.1x elapsed=0:00:10.81
+[out#0/mp4 @ 000002875ba58c80] video:108918KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.077561%
+frame= 2907 fps=254 q=16.0 Lsize=  113511KiB time=00:01:56.24 bitrate=7999.7kbits/s speed=10.2x elapsed=0:00:11.44
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test11_loop_png.mp4
+Size: 110.85 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda with solid red color (no PNG)
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -f lavfi -i color=c=red:s=200x100:d=120 -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]format=nv12,hwupload[logo];[base][logo]overlay_cuda=x=10:y=10:shortest=1 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test12_solid_color.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+ta:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  229 fps=0.0 q=21.0 size=    8704KiB time=00:00:09.12 bitrate=7818.4kbits/s speed=17.7x elapsed=0:00:00.51
+frame=  555 fps=544 q=17.0 size=   24576KiB time=00:00:22.16 bitrate=9085.2kbits/s speed=21.7x elapsed=0:00:01.02
+frame=  894 fps=581 q=16.0 size=   36608KiB time=00:00:35.72 bitrate=8395.7kbits/s speed=23.2x elapsed=0:00:01.53
+frame= 1220 fps=593 q=17.0 size=   47872KiB time=00:00:48.76 bitrate=8042.8kbits/s speed=23.7x elapsed=0:00:02.05
+frame= 1556 fps=605 q=17.0 size=   59904KiB time=00:01:02.20 bitrate=7889.6kbits/s speed=24.2x elapsed=0:00:02.57
+frame= 1884 fps=609 q=17.0 size=   72960KiB time=00:01:15.32 bitrate=7935.3kbits/s speed=24.4x elapsed=0:00:03.09
+frame= 2224 fps=616 q=16.0 size=   85760KiB time=00:01:28.92 bitrate=7900.9kbits/s speed=24.6x elapsed=0:00:03.60
+frame= 2549 fps=618 q=20.0 size=   98816KiB time=00:01:41.88 bitrate=7945.6kbits/s speed=24.7x elapsed=0:00:04.12
+frame= 2881 fps=620 q=16.0 size=  112896KiB time=00:01:55.20 bitrate=8028.2kbits/s speed=24.8x elapsed=0:00:04.64
+[out#0/mp4 @ 000001670e7bc440] video:109004KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.077503%
+frame= 2907 fps=618 q=16.0 Lsize=  113597KiB time=00:01:56.24 bitrate=8005.7kbits/s speed=24.7x elapsed=0:00:04.70
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test12_solid_color.mp4
+Size: 110.93 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda with PNG scaled on GPU (scale_cuda)
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_English.png -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]format=nv12,hwupload,scale_cuda=200:-1:format=nv12[logo];[base][logo]overlay_cuda=x=10:y=10 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test13_png_scale_gpu.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+ #0, mp4, to 'C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test13_png_scale_gpu.mp4':
+  Metadata:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  185 fps=0.0 q=18.0 size=    6400KiB time=00:00:07.36 bitrate=7123.5kbits/s speed=14.6x elapsed=0:00:00.50
+frame=  549 fps=533 q=17.0 size=   24320KiB time=00:00:21.92 bitrate=9089.0kbits/s speed=21.3x elapsed=0:00:01.02
+frame=  903 fps=589 q=16.0 size=   36608KiB time=00:00:36.08 bitrate=8311.9kbits/s speed=23.6x elapsed=0:00:01.53
+frame= 1251 fps=610 q=18.0 size=   48896KiB time=00:00:50.00 bitrate=8011.1kbits/s speed=24.4x elapsed=0:00:02.04
+frame= 1614 fps=629 q=17.0 size=   61952KiB time=00:01:04.52 bitrate=7866.0kbits/s speed=25.1x elapsed=0:00:02.56
+frame= 1965 fps=637 q=22.0 size=   76032KiB time=00:01:18.56 bitrate=7928.4kbits/s speed=25.5x elapsed=0:00:03.08
+frame= 2328 fps=646 q=18.0 size=   89856KiB time=00:01:33.08 bitrate=7908.3kbits/s speed=25.8x elapsed=0:00:03.60
+frame= 2672 fps=649 q=17.0 size=  103680KiB time=00:01:46.84 bitrate=7949.7kbits/s speed=25.9x elapsed=0:00:04.11
+[out#0/mp4 @ 0000024a10e81f00] video:108932KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.077552%
+frame= 2907 fps=650 q=16.0 Lsize=  113525KiB time=00:01:56.24 bitrate=8000.6kbits/s speed=  26x elapsed=0:00:04.46
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test13_png_scale_gpu.mp4
+Size: 110.86 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+TEST: overlay_cuda with VIDEO overlay (both GPU decoded)
+======================================================================
+Command:
+ffmpeg -y -init_hw_device cuda=cuda -filter_hw_device cuda -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test_overlay_video.mp4 -filter_complex [0:v]scale_cuda=1920:1080:format=nv12[base];[1:v]scale_cuda=200:100:format=nv12[logo];[base][logo]overlay_cuda=x=10:y=10:shortest=1 -c:v h264_nvenc -preset p3 -cq 23 -c:a copy C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test15_video_overlay.mp4
+
+Return code: 0
+
+--- STDERR (last 2000 chars) ---
+ta:
+    major_brand     : mp42
+    minor_version   : 0
+    compatible_brands: mp42mp41
+    encoder         : Lavf62.6.101
+  Stream #0:0: Video: h264 (Main) (avc1 / 0x31637661), cuda(tv, progressive), 1920x1088 [SAR 1:1 DAR 30:17], q=2-31, 25 fps, 12800 tbn
+    Metadata:
+      encoder         : Lavc62.16.100 h264_nvenc
+    Side data:
+      CPB properties: bitrate max/min/avg: 0/0/0 buffer size: 0 vbv_delay: N/A
+  Stream #0:1(eng): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 317 kb/s (default)
+    Metadata:
+      creation_time   : 2025-09-26T06:02:36.000000Z
+      handler_name    : #Mainconcept MP4 Sound Media Handler
+      vendor_id       : [0][0][0][0]
+frame=  200 fps=0.0 q=21.0 size=    7680KiB time=00:00:07.96 bitrate=7903.9kbits/s speed=15.4x elapsed=0:00:00.51
+frame=  534 fps=513 q=17.0 size=   24064KiB time=00:00:21.28 bitrate=9263.8kbits/s speed=20.5x elapsed=0:00:01.04
+frame=  870 fps=558 q=17.0 size=   36096KiB time=00:00:34.76 bitrate=8506.9kbits/s speed=22.3x elapsed=0:00:01.55
+frame= 1188 fps=572 q=18.0 size=   46592KiB time=00:00:47.48 bitrate=8038.8kbits/s speed=22.9x elapsed=0:00:02.07
+frame= 1514 fps=584 q=19.0 size=   58368KiB time=00:01:00.52 bitrate=7900.7kbits/s speed=23.3x elapsed=0:00:02.59
+frame= 1842 fps=592 q=19.0 size=   71680KiB time=00:01:13.64 bitrate=7974.0kbits/s speed=23.7x elapsed=0:00:03.11
+frame= 2175 fps=599 q=17.0 size=   84224KiB time=00:01:26.92 bitrate=7937.9kbits/s speed=  24x elapsed=0:00:03.62
+frame= 2504 fps=604 q=19.0 size=   96768KiB time=00:01:40.12 bitrate=7917.7kbits/s speed=24.1x elapsed=0:00:04.14
+frame= 2825 fps=606 q=17.0 size=  110848KiB time=00:01:52.96 bitrate=8038.8kbits/s speed=24.2x elapsed=0:00:04.66
+[out#0/mp4 @ 0000023b0ece1980] video:108968KiB audio:4505KiB subtitle:0KiB other streams:0KiB global headers:0KiB muxing overhead: 0.077527%
+frame= 2907 fps=601 q=16.0 Lsize=  113561KiB time=00:01:56.24 bitrate=8003.2kbits/s speed=  24x elapsed=0:00:04.83
+
+
+Output file: C:\Users\uzair\softwares\video-compilation-2.0\test_gpu\debug_output\test15_video_overlay.mp4
+Size: 110.90 MB
+Video info: 1920,1088,116.280000,2907
+
+======================================================================
+SUMMARY
+======================================================================
+  ✓ OK: Baseline (no overlay)
+  ✓ OK: hwdownload + CPU overlay
+  ✓ OK: overlay_cuda simple
+  ✓ OK: overlay_cuda fixed coords
+  ✓ OK: overlay_cuda scaled logo
+  ✓ OK: overlay_cuda yuv420p
+  ✓ OK: overlay_cuda no scale
+  ✓ OK: overlay_cuda shortest=1
+  ✓ OK: overlay_cuda eof_action=repeat
+  ✓ OK: overlay_cuda loop PNG
+  ✓ OK: overlay_cuda solid color
+  ✓ OK: overlay_cuda PNG scale GPU
+  ✓ OK: overlay_cuda video-on-video
