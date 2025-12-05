@@ -245,13 +245,115 @@ def test_10_eof_action():
     return run_test("overlay_cuda with eof_action=repeat", cmd)
 
 
+def test_11_loop_png():
+    """Test: Loop the PNG input"""
+    output = str(OUTPUT_DIR / "test11_loop_png.mp4")
+    cmd = [
+        'ffmpeg', '-y',
+        '-init_hw_device', 'cuda=cuda', '-filter_hw_device', 'cuda',
+        '-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda',
+        '-i', str(VIDEO_FILE),
+        '-loop', '1', '-i', str(OVERLAY_PNG),
+        '-filter_complex',
+        f'[0:v]scale_cuda={TARGET_WIDTH}:{TARGET_HEIGHT}:format=nv12[base];'
+        f'[1:v]scale=200:-1,format=nv12,hwupload[logo];'
+        f'[base][logo]overlay_cuda=x=10:y=10:shortest=1',
+        '-c:v', 'h264_nvenc', '-preset', 'p3', '-cq', '23',
+        '-c:a', 'copy',
+        output
+    ]
+    return run_test("overlay_cuda with -loop 1 on PNG", cmd)
+
+
+def test_12_solid_color_overlay():
+    """Test: Use solid color instead of PNG (to isolate PNG issue)"""
+    output = str(OUTPUT_DIR / "test12_solid_color.mp4")
+    cmd = [
+        'ffmpeg', '-y',
+        '-init_hw_device', 'cuda=cuda', '-filter_hw_device', 'cuda',
+        '-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda',
+        '-i', str(VIDEO_FILE),
+        '-f', 'lavfi', '-i', 'color=c=red:s=200x100:d=120',
+        '-filter_complex',
+        f'[0:v]scale_cuda={TARGET_WIDTH}:{TARGET_HEIGHT}:format=nv12[base];'
+        f'[1:v]format=nv12,hwupload[logo];'
+        f'[base][logo]overlay_cuda=x=10:y=10:shortest=1',
+        '-c:v', 'h264_nvenc', '-preset', 'p3', '-cq', '23',
+        '-c:a', 'copy',
+        output
+    ]
+    return run_test("overlay_cuda with solid red color (no PNG)", cmd)
+
+
+def test_13_png_scale_on_gpu():
+    """Test: Scale PNG on GPU too using hwupload first then scale_cuda"""
+    output = str(OUTPUT_DIR / "test13_png_scale_gpu.mp4")
+    cmd = [
+        'ffmpeg', '-y',
+        '-init_hw_device', 'cuda=cuda', '-filter_hw_device', 'cuda',
+        '-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda',
+        '-i', str(VIDEO_FILE),
+        '-i', str(OVERLAY_PNG),
+        '-filter_complex',
+        f'[0:v]scale_cuda={TARGET_WIDTH}:{TARGET_HEIGHT}:format=nv12[base];'
+        f'[1:v]format=nv12,hwupload,scale_cuda=200:-1:format=nv12[logo];'
+        f'[base][logo]overlay_cuda=x=10:y=10',
+        '-c:v', 'h264_nvenc', '-preset', 'p3', '-cq', '23',
+        '-c:a', 'copy',
+        output
+    ]
+    return run_test("overlay_cuda with PNG scaled on GPU (scale_cuda)", cmd)
+
+
+def test_14_check_overlay_cuda_help():
+    """Check overlay_cuda filter options"""
+    print(f"\n{'='*70}")
+    print("overlay_cuda FILTER OPTIONS")
+    print(f"{'='*70}")
+    result = subprocess.run([
+        'ffmpeg', '-h', 'filter=overlay_cuda'
+    ], capture_output=True, text=True)
+    print(result.stdout if result.stdout else result.stderr)
+
+
+def test_15_video_to_video_overlay():
+    """Test: Use video input for overlay instead of PNG"""
+    output = str(OUTPUT_DIR / "test15_video_overlay.mp4")
+    # Create a short test video first
+    test_overlay = str(OUTPUT_DIR / "test_overlay_video.mp4")
+    subprocess.run([
+        'ffmpeg', '-y',
+        '-f', 'lavfi', '-i', 'color=c=blue:s=200x100:d=120,format=nv12',
+        '-c:v', 'h264_nvenc', '-preset', 'p1',
+        test_overlay
+    ], capture_output=True)
+
+    cmd = [
+        'ffmpeg', '-y',
+        '-init_hw_device', 'cuda=cuda', '-filter_hw_device', 'cuda',
+        '-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda',
+        '-i', str(VIDEO_FILE),
+        '-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda',
+        '-i', test_overlay,
+        '-filter_complex',
+        f'[0:v]scale_cuda={TARGET_WIDTH}:{TARGET_HEIGHT}:format=nv12[base];'
+        f'[1:v]scale_cuda=200:100:format=nv12[logo];'
+        f'[base][logo]overlay_cuda=x=10:y=10:shortest=1',
+        '-c:v', 'h264_nvenc', '-preset', 'p3', '-cq', '23',
+        '-c:a', 'copy',
+        output
+    ]
+    return run_test("overlay_cuda with VIDEO overlay (both GPU decoded)", cmd)
+
+
 def main():
     print("="*70)
     print("DEBUGGING overlay_cuda ISSUES")
     print("="*70)
 
-    # Check PNG first
+    # Check PNG and overlay_cuda options first
     test_6_check_png_info()
+    test_14_check_overlay_cuda_help()
 
     # Run tests
     results = []
@@ -259,11 +361,15 @@ def main():
     results.append(("hwdownload + CPU overlay", test_5_hwdownload_cpu_overlay()))
     results.append(("overlay_cuda simple", test_2_overlay_cuda_simple()))
     results.append(("overlay_cuda fixed coords", test_3_overlay_cuda_fixed_coords()))
-    results.append(("overlay_cuda scaled logo", test_4_overlay_cuda_scaled_logo()))
+    results.append(("overlay_cuda scaled logo", test_4_overlay_cuda_scale_logo()))
     results.append(("overlay_cuda yuv420p", test_7_overlay_cuda_yuv420p()))
     results.append(("overlay_cuda no scale", test_8_overlay_cuda_no_scale()))
     results.append(("overlay_cuda shortest=1", test_9_shortest_option()))
     results.append(("overlay_cuda eof_action=repeat", test_10_eof_action()))
+    results.append(("overlay_cuda loop PNG", test_11_loop_png()))
+    results.append(("overlay_cuda solid color", test_12_solid_color_overlay()))
+    results.append(("overlay_cuda PNG scale GPU", test_13_png_scale_on_gpu()))
+    results.append(("overlay_cuda video-on-video", test_15_video_to_video_overlay()))
 
     # Summary
     print(f"\n{'='*70}")
