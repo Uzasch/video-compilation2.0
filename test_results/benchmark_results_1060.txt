@@ -1,0 +1,212 @@
+[2025-12-05 11:07:30] ======================================================================
+[2025-12-05 11:07:30] GPU ENCODING BENCHMARK STARTED
+[2025-12-05 11:07:30] ======================================================================
+[2025-12-05 11:07:30] 
+--- SYSTEM INFORMATION ---
+[2025-12-05 11:07:30]   hostname: ybh-pc-spare2
+[2025-12-05 11:07:30]   platform: Windows
+[2025-12-05 11:07:30]   python: 3.13.2
+[2025-12-05 11:07:30]   gpu_name: NVIDIA GeForce GTX 1060 6GB
+[2025-12-05 11:07:30]   driver_version: 572.60
+[2025-12-05 11:07:30]   gpu_memory_mb: 6144
+[2025-12-05 11:07:30]   pcie_gen: 3
+[2025-12-05 11:07:30]   pcie_width: 16
+[2025-12-05 11:07:30]   gpu_clock_mhz: 139
+[2025-12-05 11:07:30]   mem_clock_mhz: 405
+[2025-12-05 11:07:30]   gpu_temp_c: 49
+[2025-12-05 11:07:30]   power_draw_w: 8.24
+[2025-12-05 11:07:30] 
+--- CHECKING NVENC SUPPORT ---
+[2025-12-05 11:07:30]   h264_nvenc available: True
+[2025-12-05 11:07:30] 
+--- FINDING TEST VIDEOS ---
+[2025-12-05 11:07:30]   Found: ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4
+[2025-12-05 11:07:30]     Resolution: 3840x2160
+[2025-12-05 11:07:30]     Duration: 116.3s, FPS: 25.0, Size: 224.13MB
+[2025-12-05 11:07:30]   Found: ABC_OS_Ifyoureazombieandyouarehungry_nyv-26Sep-2025-15-37-32.mp4
+[2025-12-05 11:07:30]     Resolution: 3840x2160
+[2025-12-05 11:07:30]     Duration: 132.4s, FPS: 25.0, Size: 1293.89MB
+[2025-12-05 11:07:31]   Found: ABC_OS_Zombiebeachparty_nyv-02Sep-2025-10-56-58.mp4
+[2025-12-05 11:07:31]     Resolution: 3840x2160
+[2025-12-05 11:07:31]     Duration: 160.2s, FPS: 25.0, Size: 1575.27MB
+[2025-12-05 11:07:31]   Found: ABC_OS_Zombiesmarchingonebyone_nyv-26Sep-2025-15-20-25.mp4
+[2025-12-05 11:07:31]     Resolution: 3840x2160
+[2025-12-05 11:07:31]     Duration: 192.8s, FPS: 25.0, Size: 377.05MB
+[2025-12-05 11:07:31] 
+--- OVERLAY PNG ---
+[2025-12-05 11:07:31]   Found overlay: ABC_English.png
+[2025-12-05 11:07:31] 
+--- USING TEST VIDEO: ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 ---
+[2025-12-05 11:07:31] 
+======================================================================
+[2025-12-05 11:07:31] BOTTLENECK DIAGNOSIS - Finding the root cause
+[2025-12-05 11:07:31] ======================================================================
+[2025-12-05 11:07:31] 
+==================================================
+[2025-12-05 11:07:31] BOTTLENECK DIAGNOSIS TESTS
+[2025-12-05 11:07:31] ==================================================
+[2025-12-05 11:07:31] 
+[A] GPU-ONLY PIPELINE (NVDEC -> NVENC)
+[2025-12-05 11:07:31]     If this is slow: GPU hardware issue
+[2025-12-05 11:07:31] Running: GPU-only pipeline
+[2025-12-05 11:07:31] Command: ffmpeg -y -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -c:v h264_nvenc -preset p3 -c:a copy -f null -
+[2025-12-05 11:07:52]   Elapsed: 21.02s, Speed: 3.05x, FPS: 0.0
+[2025-12-05 11:07:52]     -> GPU processing: 3.05x realtime
+[2025-12-05 11:07:52] 
+[B] CPU DECODE -> GPU ENCODE (PCIe upload test)
+[2025-12-05 11:07:52]     If slower than [A]: PCIe upload is bottleneck
+[2025-12-05 11:07:52] Running: CPU decode -> GPU encode
+[2025-12-05 11:07:52] Command: ffmpeg -y -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -c:v h264_nvenc -preset p3 -c:a copy -f null -
+[2025-12-05 11:08:17]   Elapsed: 24.94s, Speed: 1.0x, FPS: 0.0
+[2025-12-05 11:08:17]     -> With CPU decode: 1.0x realtime
+[2025-12-05 11:08:17] 
+[C] GPU DECODE -> CPU ENCODE (PCIe download test)
+[2025-12-05 11:08:17]     If slower than [A]: PCIe download is bottleneck
+[2025-12-05 11:08:17] Running: GPU decode -> CPU encode
+[2025-12-05 11:08:17] Command: ffmpeg -y -hwaccel cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -c:v libx264 -preset ultrafast -crf 23 -c:a copy -f null -
+[2025-12-05 11:09:08]   Elapsed: 50.69s, Speed: 0.938x, FPS: 0.0
+[2025-12-05 11:09:08]     -> With GPU decode + CPU encode: 0.938x realtime
+[2025-12-05 11:09:08] 
+[D] CPU-ONLY PIPELINE (baseline)
+[2025-12-05 11:09:08]     Baseline for comparison
+[2025-12-05 11:09:08] Running: CPU-only pipeline
+[2025-12-05 11:09:08] Command: ffmpeg -y -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -c:v libx264 -preset ultrafast -crf 23 -c:a copy -f null -
+[2025-12-05 11:10:04]   Elapsed: 55.62s, Speed: 0.626x, FPS: 0.0
+[2025-12-05 11:10:04]     -> CPU only: 0.626x realtime
+[2025-12-05 11:10:04] 
+[E] COMPLEX FILTER TEST (forces CPU-GPU sync)
+[2025-12-05 11:10:04]     If much slower: CPU-GPU data transfer is bottleneck
+[2025-12-05 11:10:04] Running: With filter chain
+[2025-12-05 11:10:04] Command: ffmpeg -y -hwaccel cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -vf scale=1920:1080,eq=brightness=0.01 -c:v h264_nvenc -preset p3 -c:a copy -f null -
+[2025-12-05 11:10:32]   Elapsed: 28.40s, Speed: 1.38x, FPS: 0.0
+[2025-12-05 11:10:32]     -> With filters: 1.38x realtime
+[2025-12-05 11:10:32] 
+[F] DISK READ TEST (decode to null)
+[2025-12-05 11:10:32]     Tests storage read speed
+[2025-12-05 11:10:32] Running: Disk read + decode
+[2025-12-05 11:10:32] Command: ffmpeg -y -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -f null -
+[2025-12-05 11:10:48]   Elapsed: 16.07s, Speed: 6.55x, FPS: 0.0
+[2025-12-05 11:10:48]     -> Disk read: 6.55x realtime
+[2025-12-05 11:10:48] 
+--------------------------------------------------
+[2025-12-05 11:10:48] DIAGNOSIS ANALYSIS:
+[2025-12-05 11:10:48] --------------------------------------------------
+[2025-12-05 11:10:48] 
+  GPU Pipeline Speed: 3.05x
+[2025-12-05 11:10:48]   WARNING: CPU decode slows down by 205%
+[2025-12-05 11:10:48]   -> Possible PCIe UPLOAD bottleneck
+[2025-12-05 11:10:48]   GPU encode is 4.9x faster than CPU
+[2025-12-05 11:10:48]   WARNING: Filters slow down by 121%
+[2025-12-05 11:10:48]   -> CPU-GPU sync overhead detected
+[2025-12-05 11:10:48] 
+==================================================
+[2025-12-05 11:10:48] DECODING BENCHMARKS
+[2025-12-05 11:10:48] ==================================================
+[2025-12-05 11:10:48] Running: Decoding (CPU)
+[2025-12-05 11:10:48] Command: ffmpeg -y -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -f null -
+[2025-12-05 11:11:05]   Elapsed: 16.91s, Speed: 6.66x, FPS: 0.0
+[2025-12-05 11:11:05] Running: Decoding (GPU NVDEC)
+[2025-12-05 11:11:05] Command: ffmpeg -y -hwaccel cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -f null -
+[2025-12-05 11:11:22]   Elapsed: 16.83s, Speed: 5.12x, FPS: 0.0
+[2025-12-05 11:11:22] 
+==================================================
+[2025-12-05 11:11:22] PURE ENCODING BENCHMARKS (no filters)
+[2025-12-05 11:11:22] ==================================================
+[2025-12-05 11:11:22] Running: Pure encoding (CPU, preset=ultrafast)
+[2025-12-05 11:11:22] Command: ffmpeg -y -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -c:v libx264 -preset ultrafast -crf 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_pure_cpu_ultrafast.mp4
+[2025-12-05 11:12:14]   Elapsed: 52.46s, Speed: 0.235x, FPS: 0.0
+[2025-12-05 11:12:14] Running: Pure encoding (GPU, preset=p1)
+[2025-12-05 11:12:14] Command: ffmpeg -y -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -c:v h264_nvenc -preset p1 -rc vbr -cq 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_pure_gpu_p1.mp4
+[2025-12-05 11:12:30]   Elapsed: 16.06s, Speed: 4.69x, FPS: 0.0
+[2025-12-05 11:12:30] Running: Pure encoding (GPU, preset=p3)
+[2025-12-05 11:12:30] Command: ffmpeg -y -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -c:v h264_nvenc -preset p3 -rc vbr -cq 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_pure_gpu_p3.mp4
+[2025-12-05 11:12:53]   Elapsed: 22.62s, Speed: 3.4x, FPS: 0.0
+[2025-12-05 11:12:53] Running: Pure encoding (GPU, preset=p5)
+[2025-12-05 11:12:53] Command: ffmpeg -y -hwaccel cuda -hwaccel_output_format cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -c:v h264_nvenc -preset p5 -rc vbr -cq 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_pure_gpu_p5.mp4
+[2025-12-05 11:13:26]   Elapsed: 32.56s, Speed: 1.48x, FPS: 0.0
+[2025-12-05 11:13:26] 
+==================================================
+[2025-12-05 11:13:26] PNG OVERLAY BENCHMARKS
+[2025-12-05 11:13:26] ==================================================
+[2025-12-05 11:13:26] Running: PNG overlay (CPU, preset=fast)
+[2025-12-05 11:13:26] Command: ffmpeg -y -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_English.png -filter_complex [0:v][1:v]overlay=10:10 -c:v libx264 -preset fast -crf 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_overlay_cpu_fast.mp4
+[2025-12-05 11:17:44]   Elapsed: 258.56s, Speed: 0.0x, FPS: 0.0
+[2025-12-05 11:17:44] Running: PNG overlay (GPU, preset=p3)
+[2025-12-05 11:17:44] Command: ffmpeg -y -hwaccel cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_English.png -filter_complex [0:v][1:v]overlay=10:10 -c:v h264_nvenc -preset p3 -rc vbr -cq 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_overlay_gpu_p3.mp4
+[2025-12-05 11:18:16]   Elapsed: 31.44s, Speed: 0.842x, FPS: 0.0
+[2025-12-05 11:18:16] 
+==================================================
+[2025-12-05 11:18:16] TEXT OVERLAY BENCHMARKS (drawtext)
+[2025-12-05 11:18:16] ==================================================
+[2025-12-05 11:18:16] Running: Filter test (CPU, preset=fast)
+[2025-12-05 11:18:16] Command: ffmpeg -y -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -vf eq=brightness=0.02:contrast=1.1 -c:v libx264 -preset fast -crf 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_text_cpu_fast.mp4
+[2025-12-05 11:22:36]   Elapsed: 260.18s, Speed: 0.0618x, FPS: 0.0
+[2025-12-05 11:22:36] Running: Filter test (GPU, preset=p3)
+[2025-12-05 11:22:36] Command: ffmpeg -y -hwaccel cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -vf eq=brightness=0.02:contrast=1.1 -c:v h264_nvenc -preset p3 -rc vbr -cq 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_text_gpu_p3.mp4
+[2025-12-05 11:23:25]   Elapsed: 48.66s, Speed: 0.157x, FPS: 0.0
+[2025-12-05 11:23:25] 
+==================================================
+[2025-12-05 11:23:25] COMBINED FILTER BENCHMARKS (overlay + text)
+[2025-12-05 11:23:25] ==================================================
+[2025-12-05 11:23:25] Running: Combined filters (CPU, preset=fast)
+[2025-12-05 11:23:25] Command: ffmpeg -y -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_English.png -filter_complex [0:v][1:v]overlay=10:10,eq=brightness=0.02 -c:v libx264 -preset fast -crf 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_combined_cpu_fast.mp4
+[2025-12-05 11:27:49]   Elapsed: 264.80s, Speed: 0.0466x, FPS: 0.0
+[2025-12-05 11:27:49] Running: Combined filters (GPU, preset=p3)
+[2025-12-05 11:27:49] Command: ffmpeg -y -hwaccel cuda -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 -i C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\ABC_English.png -filter_complex [0:v][1:v]overlay=10:10,eq=brightness=0.02 -c:v h264_nvenc -preset p3 -rc vbr -cq 23 -maxrate 9M -bufsize 12M -c:a copy C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\test_combined_gpu_p3.mp4
+[2025-12-05 11:28:41]   Elapsed: 51.67s, Speed: 0.229x, FPS: 0.0
+[2025-12-05 11:28:41] 
+======================================================================
+[2025-12-05 11:28:41] BENCHMARK SUMMARY
+[2025-12-05 11:28:41] ======================================================================
+[2025-12-05 11:28:41] 
+System: ybh-pc-spare2
+[2025-12-05 11:28:41] GPU: NVIDIA GeForce GTX 1060 6GB
+[2025-12-05 11:28:41] PCIe: Gen 3 x16
+[2025-12-05 11:28:41] Video: ABC_OS_Fivezombiesjumpinginthemiddleofthenight_nyv-26Sep-2025-15-28-59.mp4 (3840x2160, 116.3s)
+[2025-12-05 11:28:41] 
+--- ENCODING SPEEDS ---
+[2025-12-05 11:28:41] Test                                Time (s)     Speed      FPS       
+[2025-12-05 11:28:41] ----------------------------------------------------------------------
+[2025-12-05 11:28:41] decode_cpu                          16.9s        6.66x      N/A       
+[2025-12-05 11:28:41] decode_gpu                          16.8s        5.12x      N/A       
+[2025-12-05 11:28:41] encode_cpu_ultrafast                52.5s        0.235x     N/A       
+[2025-12-05 11:28:41] encode_gpu_p1                       16.1s        4.69x      N/A       
+[2025-12-05 11:28:41] encode_gpu_p3                       22.6s        3.4x       N/A       
+[2025-12-05 11:28:41] encode_gpu_p5                       32.6s        1.48x      N/A       
+[2025-12-05 11:28:41] overlay_cpu_fast                    258.6s       N/A        N/A       
+[2025-12-05 11:28:41] overlay_gpu_p3                      31.4s        0.842x     N/A       
+[2025-12-05 11:28:41] text_cpu_fast                       260.2s       0.0618x    N/A       
+[2025-12-05 11:28:41] text_gpu_p3                         48.7s        0.157x     N/A       
+[2025-12-05 11:28:41] combined_cpu_fast                   264.8s       0.0466x    N/A       
+[2025-12-05 11:28:41] combined_gpu_p3                     51.7s        0.229x     N/A       
+[2025-12-05 11:28:41] 
+Results saved to:
+[2025-12-05 11:28:41]   Log: C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\benchmark_results_20251205_110730.txt
+[2025-12-05 11:28:41]   JSON: C:\Users\uzair\VSCode\video_compilation\ybh-compilation-tool-2\test_gpu\benchmark_results_20251205_112841.json
+[2025-12-05 11:28:41] 
+======================================================================
+[2025-12-05 11:28:41] KEY METRICS FOR COMPARISON (copy this)
+[2025-12-05 11:28:41] ======================================================================
+[2025-12-05 11:28:41] PC: ybh-pc-spare2
+[2025-12-05 11:28:41] GPU: NVIDIA GeForce GTX 1060 6GB
+[2025-12-05 11:28:41] PCIe: Gen 3 x16
+[2025-12-05 11:28:41] Driver: 572.60
+[2025-12-05 11:28:41] 
+DIAGNOSIS SPEEDS (x realtime):
+[2025-12-05 11:28:41]   [A] GPU-only (NVDEC->NVENC): 3.05x
+[2025-12-05 11:28:41]   [B] CPU decode->GPU encode: 1.0x
+[2025-12-05 11:28:41]   [C] GPU decode->CPU encode: 0.938x
+[2025-12-05 11:28:41]   [D] CPU-only:               0.626x
+[2025-12-05 11:28:41]   [E] With filters:           1.38x
+[2025-12-05 11:28:41]   [F] Disk read:              6.55x
+[2025-12-05 11:28:41] 
+INTERPRETATION:
+[2025-12-05 11:28:41]   - If [A] is slow: GPU hardware/driver issue
+[2025-12-05 11:28:41]   - If [B] << [A]: PCIe UPLOAD bottleneck (CPU->GPU)
+[2025-12-05 11:28:41]   - If [C] << [D]: PCIe DOWNLOAD bottleneck (GPU->CPU)
+[2025-12-05 11:28:41]   - If [E] << [A]: CPU-GPU sync overhead
+[2025-12-05 11:28:41]   - If [F] is slow: Storage bottleneck
+[2025-12-05 11:28:41] 
+======================================================================
+[2025-12-05 11:28:41] BENCHMARK COMPLETE
+[2025-12-05 11:28:41] ======================================================================

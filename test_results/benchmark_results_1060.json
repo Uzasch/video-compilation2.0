@@ -1,0 +1,220 @@
+{
+  "system_info": {
+    "hostname": "ybh-pc-spare2",
+    "platform": "Windows",
+    "python": "3.13.2",
+    "gpu_name": "NVIDIA GeForce GTX 1060 6GB",
+    "driver_version": "572.60",
+    "gpu_memory_mb": "6144",
+    "pcie_gen": "3",
+    "pcie_width": "16",
+    "gpu_clock_mhz": "139",
+    "mem_clock_mhz": "405",
+    "gpu_temp_c": "49",
+    "power_draw_w": "8.24"
+  },
+  "video_info": {
+    "width": 3840,
+    "height": 2160,
+    "fps": 25.0,
+    "codec": "h264",
+    "duration": 116.28,
+    "size_mb": 224.13
+  },
+  "benchmarks": {
+    "decode_cpu": {
+      "success": true,
+      "elapsed_seconds": 16.91,
+      "return_code": 0,
+      "speed": 6.66,
+      "fps": 0.0,
+      "bitrate_kbps": null,
+      "decoder": "cpu"
+    },
+    "decode_gpu": {
+      "success": true,
+      "elapsed_seconds": 16.83,
+      "return_code": 0,
+      "speed": 5.12,
+      "fps": 0.0,
+      "bitrate_kbps": null,
+      "decoder": "cuda"
+    },
+    "encode_cpu_ultrafast": {
+      "success": true,
+      "elapsed_seconds": 52.46,
+      "return_code": 0,
+      "speed": 0.235,
+      "fps": 0.0,
+      "bitrate_kbps": 17479.5,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_pure_cpu_ultrafast.mp4",
+      "encoder": "libx264",
+      "preset": "ultrafast",
+      "output_size_mb": 129.83
+    },
+    "encode_gpu_p1": {
+      "success": true,
+      "elapsed_seconds": 16.06,
+      "return_code": 0,
+      "speed": 4.69,
+      "fps": 0.0,
+      "bitrate_kbps": 7735.6,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_pure_gpu_p1.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p1",
+      "output_size_mb": 126.44
+    },
+    "encode_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 22.62,
+      "return_code": 0,
+      "speed": 3.4,
+      "fps": 0.0,
+      "bitrate_kbps": 8341.2,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_pure_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "output_size_mb": 127.85
+    },
+    "encode_gpu_p5": {
+      "success": true,
+      "elapsed_seconds": 32.56,
+      "return_code": 0,
+      "speed": 1.48,
+      "fps": 0.0,
+      "bitrate_kbps": 8278.7,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_pure_gpu_p5.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p5",
+      "output_size_mb": 126.61
+    },
+    "overlay_cpu_fast": {
+      "success": true,
+      "elapsed_seconds": 258.56,
+      "return_code": 0,
+      "speed": 0.0,
+      "fps": 0.0,
+      "bitrate_kbps": 8739.7,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_overlay_cpu_fast.mp4",
+      "encoder": "libx264",
+      "preset": "fast",
+      "filter": "overlay",
+      "output_size_mb": 123.27
+    },
+    "overlay_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 31.44,
+      "return_code": 0,
+      "speed": 0.842,
+      "fps": 0.0,
+      "bitrate_kbps": 4767.1,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_overlay_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "overlay",
+      "output_size_mb": 127.8
+    },
+    "text_cpu_fast": {
+      "success": true,
+      "elapsed_seconds": 260.18,
+      "return_code": 0,
+      "speed": 0.0618,
+      "fps": 0.0,
+      "bitrate_kbps": 2.4,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_text_cpu_fast.mp4",
+      "encoder": "libx264",
+      "preset": "fast",
+      "filter": "drawtext",
+      "output_size_mb": 124.78
+    },
+    "text_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 48.66,
+      "return_code": 0,
+      "speed": 0.157,
+      "fps": 0.0,
+      "bitrate_kbps": 4.8,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_text_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "drawtext",
+      "output_size_mb": 128.06
+    },
+    "combined_cpu_fast": {
+      "success": true,
+      "elapsed_seconds": 264.8,
+      "return_code": 0,
+      "speed": 0.0466,
+      "fps": 0.0,
+      "bitrate_kbps": 3.2,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_combined_cpu_fast.mp4",
+      "encoder": "libx264",
+      "preset": "fast",
+      "filter": "overlay+drawtext",
+      "output_size_mb": 123.32
+    },
+    "combined_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 51.67,
+      "return_code": 0,
+      "speed": 0.229,
+      "fps": 0.0,
+      "bitrate_kbps": 3.2,
+      "output_file": "C:\\Users\\uzair\\VSCode\\video_compilation\\ybh-compilation-tool-2\\test_gpu\\test_combined_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "overlay+drawtext",
+      "output_size_mb": 127.77
+    }
+  },
+  "diagnosis": {
+    "gpu_only_pipeline": {
+      "success": true,
+      "elapsed_seconds": 21.02,
+      "return_code": 0,
+      "speed": 3.05,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "cpu_decode_gpu_encode": {
+      "success": true,
+      "elapsed_seconds": 24.94,
+      "return_code": 0,
+      "speed": 1.0,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "gpu_decode_cpu_encode": {
+      "success": true,
+      "elapsed_seconds": 50.69,
+      "return_code": 0,
+      "speed": 0.938,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "cpu_only_pipeline": {
+      "success": true,
+      "elapsed_seconds": 55.62,
+      "return_code": 0,
+      "speed": 0.626,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "with_filters": {
+      "success": true,
+      "elapsed_seconds": 28.4,
+      "return_code": 0,
+      "speed": 1.38,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "disk_read_test": {
+      "success": true,
+      "elapsed_seconds": 16.07,
+      "return_code": 0,
+      "speed": 6.55,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    }
+  }
+}
