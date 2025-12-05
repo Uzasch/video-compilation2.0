@@ -1,0 +1,170 @@
+{
+  "system_info": {
+    "hostname": "ybh-compilation",
+    "platform": "Windows",
+    "python": "3.13.9",
+    "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
+    "driver_version": "581.57",
+    "gpu_memory_mb": "16311",
+    "pcie_gen": "1",
+    "pcie_width": "8",
+    "gpu_clock_mhz": "240",
+    "mem_clock_mhz": "405",
+    "gpu_temp_c": "32",
+    "power_draw_w": "7.39",
+    "cpu_name": "12th Gen Intel(R) Core(TM) i7-12700F"
+  },
+  "video_info": {
+    "width": 3840,
+    "height": 2160,
+    "fps": 25.0,
+    "codec": "h264",
+    "duration": 116.28,
+    "size_mb": 224.13
+  },
+  "benchmarks": {
+    "decode_cpu": {
+      "success": true,
+      "elapsed_seconds": 24.68,
+      "return_code": 0,
+      "speed": 4.05,
+      "fps": 0.0,
+      "bitrate_kbps": null,
+      "decoder": "cpu"
+    },
+    "decode_gpu": {
+      "success": true,
+      "elapsed_seconds": 25.1,
+      "return_code": 0,
+      "speed": 4.19,
+      "fps": 0.0,
+      "bitrate_kbps": null,
+      "decoder": "cuda"
+    },
+    "encode_gpu_p1": {
+      "success": true,
+      "elapsed_seconds": 10.03,
+      "return_code": 0,
+      "speed": 7.89,
+      "fps": 0.0,
+      "bitrate_kbps": 11308.3,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_pure_gpu_p1.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p1",
+      "output_size_mb": 132.15
+    },
+    "encode_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 13.72,
+      "return_code": 0,
+      "speed": 6.66,
+      "fps": 0.0,
+      "bitrate_kbps": 8738.2,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_pure_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "output_size_mb": 128.8
+    },
+    "encode_gpu_p5": {
+      "success": true,
+      "elapsed_seconds": 27.68,
+      "return_code": 0,
+      "speed": 2.49,
+      "fps": 0.0,
+      "bitrate_kbps": 8192.3,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_pure_gpu_p5.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p5",
+      "output_size_mb": 126.76
+    },
+    "overlay_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 50.29,
+      "return_code": 0,
+      "speed": 0.783,
+      "fps": 0.0,
+      "bitrate_kbps": 5243.8,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_overlay_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "overlay",
+      "output_size_mb": 128.79
+    },
+    "filter_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 54.18,
+      "return_code": 0,
+      "speed": 0.391,
+      "fps": 0.0,
+      "bitrate_kbps": 1.9,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_text_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "drawtext",
+      "output_size_mb": 128.72
+    },
+    "combined_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 56.18,
+      "return_code": 0,
+      "speed": 0.535,
+      "fps": 0.0,
+      "bitrate_kbps": 7491.2,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_combined_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "overlay+drawtext",
+      "output_size_mb": 128.86
+    }
+  },
+  "diagnosis": {
+    "gpu_only_pipeline": {
+      "success": true,
+      "elapsed_seconds": 13.52,
+      "return_code": 0,
+      "speed": 6.77,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "cpu_decode_gpu_encode": {
+      "success": true,
+      "elapsed_seconds": 27.01,
+      "return_code": 0,
+      "speed": 1.75,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "gpu_decode_cpu_encode": {
+      "success": true,
+      "elapsed_seconds": 36.74,
+      "return_code": 0,
+      "speed": 0.471,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "cpu_only_pipeline": {
+      "success": true,
+      "elapsed_seconds": 52.96,
+      "return_code": 0,
+      "speed": 1.12,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "with_filters": {
+      "success": true,
+      "elapsed_seconds": 41.26,
+      "return_code": 0,
+      "speed": 1.62,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "disk_read_test": {
+      "success": true,
+      "elapsed_seconds": 24.46,
+      "return_code": 0,
+      "speed": 2.38,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    }
+  }
+}
