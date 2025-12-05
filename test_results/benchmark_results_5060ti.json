@@ -1,0 +1,215 @@
+{
+  "system_info": {
+    "hostname": "ybh-compilation",
+    "platform": "Windows",
+    "python": "3.13.9",
+    "gpu_name": "NVIDIA GeForce RTX 5060 Ti",
+    "driver_version": "581.57",
+    "gpu_memory_mb": "16311",
+    "pcie_gen": "1",
+    "pcie_width": "8",
+    "gpu_clock_mhz": "2572",
+    "mem_clock_mhz": "14001",
+    "gpu_temp_c": "36",
+    "power_draw_w": "21.03",
+    "cpu_name": "12th Gen Intel(R) Core(TM) i7-12700F"
+  },
+  "video_info": {
+    "width": 3840,
+    "height": 2160,
+    "fps": 25.0,
+    "codec": "h264",
+    "duration": 116.28,
+    "size_mb": 224.13
+  },
+  "benchmarks": {
+    "decode_cpu": {
+      "success": true,
+      "elapsed_seconds": 25.39,
+      "return_code": 0,
+      "speed": 3.49,
+      "fps": 0.0,
+      "bitrate_kbps": null,
+      "decoder": "cpu"
+    },
+    "decode_gpu": {
+      "success": true,
+      "elapsed_seconds": 23.83,
+      "return_code": 0,
+      "speed": 4.26,
+      "fps": 0.0,
+      "bitrate_kbps": null,
+      "decoder": "cuda"
+    },
+    "encode_cpu_ultrafast": {
+      "success": true,
+      "elapsed_seconds": 62.94,
+      "return_code": 0,
+      "speed": 0.576,
+      "fps": 0.0,
+      "bitrate_kbps": 10486.4,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_pure_cpu_ultrafast.mp4",
+      "encoder": "libx264",
+      "preset": "ultrafast",
+      "output_size_mb": 129.24
+    },
+    "encode_gpu_p1": {
+      "success": true,
+      "elapsed_seconds": 9.96,
+      "return_code": 0,
+      "speed": 8.11,
+      "fps": 0.0,
+      "bitrate_kbps": 11983.8,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_pure_gpu_p1.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p1",
+      "output_size_mb": 132.15
+    },
+    "encode_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 13.73,
+      "return_code": 0,
+      "speed": 6.69,
+      "fps": 0.0,
+      "bitrate_kbps": 8535.0,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_pure_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "output_size_mb": 128.8
+    },
+    "encode_gpu_p5": {
+      "success": true,
+      "elapsed_seconds": 27.67,
+      "return_code": 0,
+      "speed": 2.36,
+      "fps": 0.0,
+      "bitrate_kbps": 8738.5,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_pure_gpu_p5.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p5",
+      "output_size_mb": 126.76
+    },
+    "overlay_cpu_fast": {
+      "success": true,
+      "elapsed_seconds": 299.18,
+      "return_code": 0,
+      "speed": 0.217,
+      "fps": 0.0,
+      "bitrate_kbps": 7490.5,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_overlay_cpu_fast.mp4",
+      "encoder": "libx264",
+      "preset": "fast",
+      "filter": "overlay",
+      "output_size_mb": 118.67
+    },
+    "overlay_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 57.6,
+      "return_code": 0,
+      "speed": 0.377,
+      "fps": 0.0,
+      "bitrate_kbps": 1.9,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_overlay_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "overlay",
+      "output_size_mb": 128.79
+    },
+    "text_cpu_fast": {
+      "success": false,
+      "error": "timeout",
+      "elapsed_seconds": 300,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_text_cpu_fast.mp4",
+      "encoder": "libx264",
+      "preset": "fast",
+      "filter": "drawtext",
+      "output_size_mb": 102.25
+    },
+    "text_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 54.92,
+      "return_code": 0,
+      "speed": 0.234,
+      "fps": 0.0,
+      "bitrate_kbps": 3.2,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_text_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "drawtext",
+      "output_size_mb": 128.72
+    },
+    "combined_cpu_fast": {
+      "success": false,
+      "error": "timeout",
+      "elapsed_seconds": 300,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_combined_cpu_fast.mp4",
+      "encoder": "libx264",
+      "preset": "fast",
+      "filter": "overlay+drawtext",
+      "output_size_mb": 107.25
+    },
+    "combined_gpu_p3": {
+      "success": true,
+      "elapsed_seconds": 56.4,
+      "return_code": 0,
+      "speed": 0.304,
+      "fps": 0.0,
+      "bitrate_kbps": 2.4,
+      "output_file": "C:\\Users\\uzair\\softwares\\video-compilation-2.0\\test_gpu\\test_combined_gpu_p3.mp4",
+      "encoder": "h264_nvenc",
+      "preset": "p3",
+      "filter": "overlay+drawtext",
+      "output_size_mb": 128.86
+    }
+  },
+  "diagnosis": {
+    "gpu_only_pipeline": {
+      "success": true,
+      "elapsed_seconds": 13.66,
+      "return_code": 0,
+      "speed": 6.37,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "cpu_decode_gpu_encode": {
+      "success": true,
+      "elapsed_seconds": 30.53,
+      "return_code": 0,
+      "speed": 1.4,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "gpu_decode_cpu_encode": {
+      "success": true,
+      "elapsed_seconds": 51.78,
+      "return_code": 0,
+      "speed": 1.44,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "cpu_only_pipeline": {
+      "success": true,
+      "elapsed_seconds": 66.97,
+      "return_code": 0,
+      "speed": 0.579,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "with_filters": {
+      "success": true,
+      "elapsed_seconds": 36.96,
+      "return_code": 0,
+      "speed": 1.73,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    },
+    "disk_read_test": {
+      "success": true,
+      "elapsed_seconds": 25.29,
+      "return_code": 0,
+      "speed": 4.7,
+      "fps": 0.0,
+      "bitrate_kbps": null
+    }
+  }
+}
