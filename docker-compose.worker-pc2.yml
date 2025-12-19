@@ -37,7 +37,7 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      - REDIS_URL=redis://192.168.1.83:6379/0  # Point to PC1's Redis
+      - REDIS_URL=redis://192.168.1.173:6379/0  # Point to main Redis
       - PYTHONUNBUFFERED=1
       - WORKER_NAME=${HOSTNAME}
     restart: unless-stopped
