@@ -1,22 +1,20 @@
 services:
-  # Celery Worker - 4K capable worker, connects to PC1's Redis
+  # Celery Worker - PC2 (GTX 1060 6GB, 16GB RAM)
   # Queue assignment:
-  #   - 4k_queue: Large jobs (4K >20 videos, non-4K >40 videos)
   #   - gpu_queue: Text animation jobs, moderate 4K jobs
   #   - default_queue: Simple jobs (fallback)
-  # Change worker name to pc3, pc4, etc. depending on which PC this runs on
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: video-compilation-celery-4k
-    command: celery -A workers.celery_app worker -Q 4k_queue,gpu_queue,default_queue --concurrency=1 --loglevel=info -n pc3@%h
+    container_name: video-compilation-celery-pc2
+    command: celery -A workers.celery_app worker -Q gpu_queue,default_queue --concurrency=1 --loglevel=info -n pc2_worker@%h
     deploy:
       resources:
         limits:
-          memory: 32g
+          memory: 10g
         reservations:
-          memory: 16g
+          memory: 6g
           devices:
             - driver: nvidia
               count: 1

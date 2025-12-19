@@ -1,20 +1,19 @@
 services:
-  # Celery Worker - Connects to PC1's Redis
+  # Celery Worker - PC3 (GTX 750 2GB, 16GB RAM)
   # Queue assignment:
-  #   - default_queue: Simple jobs (no text animation, small video count)
-  # Change worker name to pc2 or pc3 depending on which PC this runs on
+  #   - default_queue: Simple jobs only (weak GPU)
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: video-compilation-celery-worker
-    command: celery -A workers.celery_app worker -Q default_queue --concurrency=1 --loglevel=info -n pc2@%h
+    container_name: video-compilation-celery-pc3
+    command: celery -A workers.celery_app worker -Q default_queue --concurrency=1 --loglevel=info -n pc3_worker@%h
     deploy:
       resources:
         limits:
-          memory: 8g
+          memory: 10g
         reservations:
-          memory: 4g
+          memory: 6g
           devices:
             - driver: nvidia
               count: 1

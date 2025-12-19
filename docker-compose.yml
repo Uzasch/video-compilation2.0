@@ -58,22 +58,23 @@ services:
       start_period: 30s
     restart: unless-stopped
 
-  # Celery Worker - Video Processing (PC1 - Main server)
+  # Celery Worker - Video Processing (PC1 - RTX 3060 12GB, 64GB RAM)
   # Queue assignment:
+  #   - 4k_queue: Heavy 4K video processing jobs
   #   - gpu_queue: Text animation jobs, moderate 4K jobs
-  #   - default_queue: Simple jobs (no text animation, small video count)
+  #   - default_queue: Simple jobs (fallback)
   celery-worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: video-compilation-celery
-    command: celery -A workers.celery_app worker -Q gpu_queue,default_queue --concurrency=1 --loglevel=info -n pc1@%h
+    command: celery -A workers.celery_app worker -Q 4k_queue,gpu_queue,default_queue --concurrency=1 --loglevel=info -n pc1_worker@%h
     deploy:
       resources:
         limits:
-          memory: 8g
+          memory: 16g
         reservations:
-          memory: 4g
+          memory: 8g
           devices:
             - driver: nvidia
               count: 1
@@ -120,7 +121,7 @@ services:
     env_file:
       - ./frontend/video-compilation2.0/.env
     environment:
-      - VITE_API_URL=http://192.168.1.83:8000/api
+      - VITE_API_URL=http://192.168.1.173:8000/api
     depends_on:
       - backend
     networks:
