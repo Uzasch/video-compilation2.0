@@ -179,23 +179,30 @@ export default function CompilationDetails() {
     moveMutation.mutate(customFilename)
   }
 
+  const formatTimestamp = (totalSeconds) => {
+    const hours = Math.floor(totalSeconds / 3600)
+    const minutes = Math.floor((totalSeconds % 3600) / 60)
+    const seconds = Math.floor(totalSeconds % 60)
+    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+  }
+
   const handleCopySequence = () => {
     if (!items || items.length === 0) return
 
     const lines = []
-    for (const item of items) {
-      // Skip intro and outro
-      if (item.item_type === 'intro' || item.item_type === 'outro') continue
-      // Skip images
-      if (item.item_type === 'image') continue
+    let currentTimestamp = 0
 
-      // For videos, add video_id
+    for (const item of items) {
+      // For videos, add video_id, title, and timestamp
       if (item.item_type === 'video' && item.video_id) {
-        lines.push(item.video_id)
+        const title = item.title || ''
+        const timestamp = formatTimestamp(currentTimestamp)
+        lines.push(`${item.video_id}\t${title}\t${timestamp}`)
       }
-      // For transitions with manual path, add the path
-      else if (item.item_type === 'transition' && item.path) {
-        lines.push(item.path)
+
+      // Add duration to timestamp for next item
+      if (item.duration) {
+        currentTimestamp += item.duration
       }
     }
 
