@@ -1,8 +1,9 @@
 services:
-  # Redis - Task Queue
+  # Redis - Task Queue (with persistence)
   redis:
     image: redis:7-alpine
     container_name: video-compilation-redis
+    command: redis-server --appendonly yes --appendfsync everysec
     ports:
       - "6379:6379"
     volumes:
@@ -51,7 +52,7 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://192.168.1.83:8000/health', timeout=5)"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
