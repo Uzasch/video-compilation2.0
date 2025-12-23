@@ -126,29 +126,32 @@ def check_and_prefetch_next_job(worker_name: str, logger, current_job_id: str = 
         logger.warning(f"  Could not check for next job: {e}")
         return None
 
-@app.task(bind=True)
+@app.task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 10}, retry_backoff=True)
 def process_standard_compilation(self, job_id: str):
     """
     Process a standard video compilation job.
     Runs on default_queue (all workers).
     Uses GPU-accelerated encoding (all PCs have GPUs).
+    Auto-retries on transient errors (DNS, network) up to 3 times.
     """
     return _process_compilation(self, job_id, worker_type="standard")
 
-@app.task(bind=True)
+@app.task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 10}, retry_backoff=True)
 def process_gpu_compilation(self, job_id: str):
     """
     Process a GPU-accelerated compilation.
     Runs on gpu_queue for text animation jobs.
+    Auto-retries on transient errors (DNS, network) up to 3 times.
     """
     return _process_compilation(self, job_id, worker_type="gpu")
 
-@app.task(bind=True)
+@app.task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 10}, retry_backoff=True)
 def process_4k_compilation(self, job_id: str):
     """
     Process a 4K video compilation with >40 videos.
     Runs on 4k_queue (load balanced across all workers).
     Uses GPU-accelerated encoding.
+    Auto-retries on transient errors (DNS, network) up to 3 times.
     """
     return _process_compilation(self, job_id, worker_type="4k")
 
