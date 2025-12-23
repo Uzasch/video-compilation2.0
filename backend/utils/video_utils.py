@@ -1,6 +1,7 @@
 import subprocess
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Optional, Dict, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -41,17 +42,37 @@ def get_video_info(video_path: str) -> Optional[Dict]:
         ]
 
         # Wake up SMB mount by checking if path exists (handles stale connections)
+        path_exists = False
         try:
-            Path(video_path).exists()
-        except:
-            pass
+            path_check_start = time.time()
+            path_exists = Path(video_path).exists()
+            path_check_elapsed = time.time() - path_check_start
+
+            if path_check_elapsed > 2.0:
+                logger.warning(f"Slow path check ({path_check_elapsed:.2f}s) for: {video_path} | Network may be slow")
+
+            if not path_exists:
+                logger.warning(f"Path does not exist: {video_path}")
+                return None
+        except OSError as e:
+            logger.error(f"Network/IO error checking path {video_path}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Path check failed for {video_path}: {e}")
+            return None
+
+        logger.debug(f"Running ffprobe for: {video_path}")
+        start_time = time.time()
 
         result = subprocess.run(
             cmd,
             capture_output=True,
             text=True,
-            timeout=30  # Increased for slow SMB connections
+            timeout=180  # 3 minutes for slow SMB connections
         )
+
+        elapsed = time.time() - start_time
+        logger.info(f"ffprobe completed in {elapsed:.2f}s for: {video_path}")
 
         if result.returncode != 0:
             logger.error(f"ffprobe failed for {video_path}: {result.stderr}")
@@ -85,7 +106,10 @@ def get_video_info(video_path: str) -> Optional[Dict]:
         }
 
     except subprocess.TimeoutExpired:
-        logger.error(f"ffprobe timeout for {video_path}")
+        elapsed = time.time() - start_time
+        # Extract mount point for network debugging
+        mount_point = "/".join(video_path.replace("\\", "/").split("/")[:4]) if "/" in video_path.replace("\\", "/") else video_path
+        logger.error(f"ffprobe timeout after {elapsed:.1f}s for {video_path} | Mount: {mount_point} | Network share may be unresponsive")
         return None
     except json.JSONDecodeError as e:
         logger.error(f"JSON decode error for {video_path}: {e}")
