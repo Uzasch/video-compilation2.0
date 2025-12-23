@@ -1,11 +1,12 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from services.bigquery import get_videos_info_by_ids, get_all_channel_assets, get_production_path
-from services.storage import normalize_paths, normalize_path_for_server, copy_file_sequential
+from services.bigquery import get_videos_info_by_ids, get_all_channel_assets, get_production_path, upsert_videos_bulk
+from services.storage import normalize_paths, normalize_path_for_server, copy_file_sequential, check_paths_exist
 from services.supabase import get_supabase_client
 from services.logger import setup_validation_logger, setup_job_logger
 from utils.video_utils import get_videos_info_batch
+from api.config import get_settings
 from datetime import datetime
 from uuid import uuid4
 import shutil
@@ -13,13 +14,49 @@ import logging
 import asyncio
 from pathlib import Path
 from celery import Celery
+from kombu.exceptions import OperationalError
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# Initialize Celery client for worker stats (will be configured in Task 5)
-# For now, create basic Celery app for inspection
-celery_app = Celery('workers', broker='redis://redis:6379/0')
+# Initialize Celery client with proper backend
+settings = get_settings()
+celery_app = Celery('workers', broker=settings.redis_url, backend=settings.redis_url)
+
+
+def submit_task_with_confirmation(task_func, job_id: str, max_retries: int = 3):
+    """
+    Submit a Celery task with delivery confirmation.
+    Retries if Redis is temporarily unreachable.
+
+    Returns:
+        task: The AsyncResult object
+    Raises:
+        Exception: If task delivery fails after retries
+    """
+    import time
+
+    for attempt in range(max_retries):
+        try:
+            # Submit task
+            task = task_func.delay(job_id)
+
+            # Verify task was delivered by checking it exists in broker
+            # This forces a round-trip to Redis to confirm delivery
+            task_func.app.connection().ensure_connection(max_retries=1)
+
+            logger.info(f"Task {task.id} delivered successfully for job {job_id}")
+            return task
+
+        except OperationalError as e:
+            logger.warning(f"Task delivery attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(1)  # Wait before retry
+            else:
+                raise Exception(f"Failed to deliver task after {max_retries} attempts: {e}")
+        except Exception as e:
+            logger.error(f"Unexpected error submitting task: {e}")
+            raise
 
 # Request/Response Models
 class VerifyJobRequest(BaseModel):
@@ -81,6 +118,40 @@ class RevalidateResponse(BaseModel):
     """Response with revalidated items"""
     total_duration: float
     items: List[JobItem]
+
+
+# Models for Add Videos endpoint
+class VideoEntry(BaseModel):
+    """Single video entry for bulk add"""
+    video_id: str
+    path: str
+    video_title: str
+
+
+class AddVideosRequest(BaseModel):
+    """Request to add multiple videos to BigQuery"""
+    videos: List[VideoEntry]
+
+
+class VideoValidationResult(BaseModel):
+    """Validation result for a single video"""
+    video_id: str
+    original_path: str
+    normalized_path: str
+    video_title: str
+    path_exists: bool
+    saved: bool
+    updated: bool = False  # True if existing video was updated
+    error: Optional[str] = None
+
+
+class AddVideosResponse(BaseModel):
+    """Response for bulk add videos"""
+    success: bool
+    inserted_count: int
+    updated_count: int
+    failed_count: int
+    results: List[VideoValidationResult]
 
 
 @router.post("/verify-path", response_model=VerifyPathResponse)
@@ -535,15 +606,15 @@ async def submit_job(request: SubmitJobRequest):
 
         if is_large_job:
             # Large jobs (including text animation with many videos) → 4k_queue
-            task = process_4k_compilation.delay(job_id)
+            task = submit_task_with_confirmation(process_4k_compilation, job_id)
             queue_name = "4k_queue"
         elif is_small_job:
             # Simple small jobs → default_queue
-            task = process_standard_compilation.delay(job_id)
+            task = submit_task_with_confirmation(process_standard_compilation, job_id)
             queue_name = "default_queue"
         else:
             # Medium jobs (text animation, moderate 4K) → gpu_queue
-            task = process_gpu_compilation.delay(job_id)
+            task = submit_task_with_confirmation(process_gpu_compilation, job_id)
             queue_name = "gpu_queue"
 
         logger.info(f"Job {job_id} queued to {queue_name} (task_id: {task.id}, videos: {video_count}, 4k: {request.enable_4k}, text_animation: {has_text_animation})")
@@ -561,6 +632,14 @@ async def submit_job(request: SubmitJobRequest):
     except HTTPException:
         raise
     except Exception as e:
+        # Mark job as failed if task submission failed
+        try:
+            supabase.table('jobs').update({
+                'status': 'failed',
+                'error_message': f'Task submission failed: {str(e)}'
+            }).eq('job_id', job_id).execute()
+        except:
+            pass
         raise HTTPException(status_code=500, detail=f"Failed to submit job: {str(e)}")
 
 
@@ -736,6 +815,109 @@ def sanitize_filename(filename: str) -> str:
     filename = re.sub(r'[-\s]+', '_', filename)
 
     return filename.lower()
+
+
+@router.post("/videos", response_model=AddVideosResponse)
+async def add_videos(request: AddVideosRequest):
+    """
+    Bulk add or update videos in the BigQuery path table.
+
+    Workflow:
+    1. Normalize all paths to Windows UNC format
+    2. Validate paths exist on SMB share (parallel check)
+    3. Insert new videos or update existing ones in BigQuery
+    4. Return detailed results per video
+
+    Supported path formats:
+    - Windows UNC: \\\\192.168.1.6\\Share3\\video.mp4
+    - Drive letter: V:\\folder\\video.mp4
+    - SMB URL: smb://192.168.1.6/Share3/video.mp4
+    - macOS Volume: /Volumes/Share3/video.mp4
+
+    All paths are normalized to UNC format before storage.
+    If a video_id already exists, the path will be updated.
+    """
+    if not request.videos:
+        raise HTTPException(status_code=400, detail="No videos provided")
+
+    logger.info(f"Adding/updating {len(request.videos)} videos in BigQuery")
+
+    # Extract paths for batch operations
+    paths = [v.path for v in request.videos]
+
+    # Step 1: Normalize all paths to UNC format
+    normalized_paths = normalize_paths(paths)
+
+    # Step 2: Check which paths exist (parallel)
+    path_existence = await asyncio.to_thread(check_paths_exist, normalized_paths)
+
+    # Step 3: Build results and collect valid videos
+    results = []
+    valid_videos = []
+
+    for i, video in enumerate(request.videos):
+        normalized = normalized_paths[i]
+        exists = path_existence.get(normalized, False)
+
+        result = VideoValidationResult(
+            video_id=video.video_id,
+            original_path=video.path,
+            normalized_path=normalized,
+            video_title=video.video_title,
+            path_exists=exists,
+            saved=False,
+            updated=False,
+            error=None if exists else "Path not found on SMB share"
+        )
+        results.append(result)
+
+        if exists:
+            valid_videos.append({
+                "video_id": video.video_id,
+                "path_nyt": normalized,
+                "video_title": video.video_title
+            })
+
+    # Step 4: Upsert valid videos to BigQuery (insert new, update existing)
+    inserted_count = 0
+    updated_count = 0
+    if valid_videos:
+        upsert_result = await asyncio.to_thread(upsert_videos_bulk, valid_videos)
+
+        if upsert_result["success"]:
+            inserted_ids = set(upsert_result.get("inserted_ids", []))
+            updated_ids = set(upsert_result.get("updated_ids", []))
+            inserted_count = len(inserted_ids)
+            updated_count = len(updated_ids)
+
+            # Mark videos as saved and set updated flag
+            for result in results:
+                if result.path_exists:
+                    if result.video_id in inserted_ids:
+                        result.saved = True
+                        result.updated = False
+                    elif result.video_id in updated_ids:
+                        result.saved = True
+                        result.updated = True
+        else:
+            # Mark all as failed if BigQuery upsert failed
+            error_msg = f"Database error: {upsert_result['errors']}"
+            for result in results:
+                if result.path_exists:
+                    result.error = error_msg
+                    result.saved = False
+
+    failed_count = len(request.videos) - inserted_count - updated_count
+
+    logger.info(f"Added {inserted_count} new, updated {updated_count}, {failed_count} failed")
+
+    return AddVideosResponse(
+        success=(inserted_count + updated_count) > 0,
+        inserted_count=inserted_count,
+        updated_count=updated_count,
+        failed_count=failed_count,
+        results=results
+    )
 
 
 @router.get("/")

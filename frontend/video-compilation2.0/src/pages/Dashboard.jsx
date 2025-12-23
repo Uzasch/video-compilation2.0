@@ -1,33 +1,18 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../hooks/useAuth'
 import apiClient from '../services/api'
 import Layout from '../components/Layout'
-import JobCard from '../components/JobCard'
+import AddVideoDialog from '../components/AddVideoDialog'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Loader2, Users, Clock, Activity } from 'lucide-react'
+import { Plus, Loader2, Users, Clock, Activity, Video } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const [jobs, setJobs] = useState([])
-
-  // Fetch active jobs
-  const { data: initialJobs, isLoading } = useQuery({
-    queryKey: ['activeJobs', user?.id],
-    queryFn: async () => {
-      const params = { status: 'active' }
-      if (user?.role !== 'admin') {
-        params.user_id = user.id
-      }
-      const { data } = await apiClient.get('/jobs', { params })
-      return data
-    },
-    enabled: !!user
-  })
+  const [addVideoOpen, setAddVideoOpen] = useState(false)
 
   // Fetch queue statistics
   const { data: queueStats } = useQuery({
@@ -40,26 +25,6 @@ export default function Dashboard() {
     enabled: !!user
   })
 
-  useEffect(() => {
-    if (initialJobs) setJobs(initialJobs)
-  }, [initialJobs])
-
-  // Poll for job updates
-  useEffect(() => {
-    if (!user) return
-    const interval = setInterval(async () => {
-      try {
-        const params = { status: 'active' }
-        if (user?.role !== 'admin') params.user_id = user.id
-        const { data } = await apiClient.get('/jobs', { params })
-        setJobs(data || [])
-      } catch (error) {
-        console.error('Failed to fetch jobs:', error)
-      }
-    }, 5000)
-    return () => clearInterval(interval)
-  }, [user])
-
   return (
     <Layout>
       <div className="space-y-8">
@@ -71,9 +36,14 @@ export default function Dashboard() {
               Monitor active jobs and queue status
             </p>
           </div>
-          <Button onClick={() => navigate('/new')} className="shadow-lg hover:shadow-xl transition-all">
-            <Plus className="mr-2 h-4 w-4" /> New Compilation
-          </Button>
+          <div className="flex gap-3">
+            <Button variant="outline" onClick={() => setAddVideoOpen(true)}>
+              <Video className="mr-2 h-4 w-4" /> Add Video
+            </Button>
+            <Button onClick={() => navigate('/new')} className="shadow-lg hover:shadow-xl transition-all">
+              <Plus className="mr-2 h-4 w-4" /> New Compilation
+            </Button>
+          </div>
         </div>
 
         {/* Queue Statistics */}
@@ -159,34 +129,10 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {/* Active Jobs List */}
-        <div>
-          <h3 className="text-lg font-semibold text-foreground mb-4">Active Jobs</h3>
-          {isLoading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-32 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : jobs.length === 0 ? (
-            <Card className="bg-card/60 backdrop-blur-sm border-border/50">
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <Activity className="h-12 w-12 text-muted-foreground/50 mb-4" />
-                <p className="sidebar mb-4">No active jobs</p>
-                <Button variant="outline" onClick={() => navigate('/new')}>
-                  Create your first compilation
-                </Button>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {jobs.map((job) => (
-                <JobCard key={job.job_id} job={job} />
-              ))}
-            </div>
-          )}
-        </div>
       </div>
+
+      {/* Add Video Dialog */}
+      <AddVideoDialog open={addVideoOpen} onOpenChange={setAddVideoOpen} />
     </Layout>
   )
 }

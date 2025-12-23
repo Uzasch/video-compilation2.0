@@ -230,6 +230,125 @@ def get_production_path(channel_name: str) -> Optional[str]:
         logger.error(f"Error querying production path for {channel_name}: {e}", exc_info=True)
         return None
 
+def upsert_videos_bulk(videos: List[Dict]) -> Dict:
+    """
+    Insert or update multiple videos in the BigQuery path table.
+    If video_id exists, updates path_nyt and video_title.
+    If video_id doesn't exist, inserts new row.
+
+    Args:
+        videos: List of dicts with keys: video_id, path_nyt, video_title
+
+    Returns:
+        Dict with keys: success, upserted, updated_ids, inserted_ids, errors
+
+    Example:
+        videos = [
+            {"video_id": "abc123", "path_nyt": "\\\\192.168.1.6\\Share3\\video.mp4", "video_title": "My Video"},
+            {"video_id": "xyz789", "path_nyt": "\\\\192.168.1.6\\Share3\\video2.mp4", "video_title": "Another Video"}
+        ]
+        result = upsert_videos_bulk(videos)
+        # Returns: {"success": True, "upserted": 2, "updated_ids": ["abc123"], "inserted_ids": ["xyz789"], "errors": []}
+    """
+    if not videos:
+        return {"success": True, "upserted": 0, "updated_ids": [], "inserted_ids": [], "errors": []}
+
+    client = get_bigquery_client()
+    table_id = "ybh-deployment-testing.ybh_assest_path.path"
+
+    try:
+        # Step 1: Check which video_ids already exist
+        video_ids = [v["video_id"] for v in videos]
+        existing_ids = set()
+
+        check_query = """
+        SELECT video_id
+        FROM `ybh-deployment-testing.ybh_assest_path.path`
+        WHERE video_id IN UNNEST(@video_ids)
+        """
+        job_config = bigquery.QueryJobConfig(
+            query_parameters=[
+                bigquery.ArrayQueryParameter("video_ids", "STRING", video_ids)
+            ]
+        )
+        check_job = client.query(check_query, job_config=job_config)
+        for row in check_job.result():
+            existing_ids.add(row["video_id"])
+
+        logger.info(f"Found {len(existing_ids)} existing video IDs out of {len(video_ids)}")
+
+        # Step 2: Separate into updates and inserts
+        videos_to_update = [v for v in videos if v["video_id"] in existing_ids]
+        videos_to_insert = [v for v in videos if v["video_id"] not in existing_ids]
+
+        updated_ids = []
+        inserted_ids = []
+        errors = []
+
+        # Step 3: Update existing videos (one by one for simplicity)
+        for video in videos_to_update:
+            update_query = """
+            UPDATE `ybh-deployment-testing.ybh_assest_path.path`
+            SET path_nyt = @path_nyt, video_title = @video_title
+            WHERE video_id = @video_id
+            """
+            update_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("video_id", "STRING", video["video_id"]),
+                    bigquery.ScalarQueryParameter("path_nyt", "STRING", video["path_nyt"]),
+                    bigquery.ScalarQueryParameter("video_title", "STRING", video["video_title"]),
+                ]
+            )
+            try:
+                update_job = client.query(update_query, job_config=update_config)
+                update_job.result()  # Wait for completion
+                updated_ids.append(video["video_id"])
+                logger.info(f"Updated video {video['video_id']}")
+            except Exception as e:
+                logger.error(f"Failed to update video {video['video_id']}: {e}")
+                errors.append(f"Update failed for {video['video_id']}: {str(e)}")
+
+        # Step 4: Insert new videos
+        if videos_to_insert:
+            rows_to_insert = [
+                {
+                    "video_id": v["video_id"],
+                    "path_nyt": v["path_nyt"],
+                    "video_title": v["video_title"]
+                }
+                for v in videos_to_insert
+            ]
+            insert_errors = client.insert_rows_json(table_id, rows_to_insert)
+
+            if insert_errors:
+                logger.error(f"BigQuery insert errors: {insert_errors}")
+                errors.extend([str(e) for e in insert_errors])
+            else:
+                inserted_ids = [v["video_id"] for v in videos_to_insert]
+                logger.info(f"Inserted {len(inserted_ids)} new videos")
+
+        total_upserted = len(updated_ids) + len(inserted_ids)
+        logger.info(f"Upsert complete: {len(updated_ids)} updated, {len(inserted_ids)} inserted")
+
+        return {
+            "success": total_upserted > 0 or len(errors) == 0,
+            "upserted": total_upserted,
+            "updated_ids": updated_ids,
+            "inserted_ids": inserted_ids,
+            "errors": errors
+        }
+
+    except Exception as e:
+        logger.error(f"Error upserting videos to BigQuery: {e}", exc_info=True)
+        return {
+            "success": False,
+            "upserted": 0,
+            "updated_ids": [],
+            "inserted_ids": [],
+            "errors": [str(e)]
+        }
+
+
 def insert_compilation_result(job_data: Dict):
     """
     Insert compilation result into Supabase compilation_history table.
