@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     output_dir: str = "output"
 
     # CORS
-    cors_origins: Union[str, List[str]] = "http://localhost:3000,http://192.168.1.83:3000"
+    cors_origins: Union[str, List[str]] = "http://localhost:3000,http://192.168.1.173:3000"
 
     @field_validator('cors_origins', mode='before')
     @classmethod
