@@ -619,9 +619,11 @@ async def submit_job(request: SubmitJobRequest):
 
         logger.info(f"Job {job_id} queued to {queue_name} (task_id: {task.id}, videos: {video_count}, 4k: {request.enable_4k}, text_animation: {has_text_animation})")
 
-        # Store the Celery task_id for potential revocation
+        # Store the Celery task_id and queue_name for tracking
+        # queue_name being set confirms the task was successfully submitted to Redis
         supabase.table('jobs').update({
-            'task_id': task.id
+            'task_id': task.id,
+            'queue_name': queue_name
         }).eq('job_id', job_id).execute()
 
         return SubmitJobResponse(

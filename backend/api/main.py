@@ -27,8 +27,6 @@ SMB_MOUNTS = [
     "/mnt/new_share_4",
 ]
 KEEPALIVE_INTERVAL = 5  # seconds - aggressive to prevent stale
-STALE_JOB_CHECK_INTERVAL = 60  # seconds - check for stuck jobs every minute
-STALE_JOB_THRESHOLD = 300  # seconds - job is stale if queued for >5 minutes with no worker
 
 def ping_mount(mount: str):
     """Ping a single mount to keep it alive."""
@@ -58,76 +56,16 @@ async def smb_keepalive_task():
             except Exception as e:
                 logger.error(f"SMB keep-alive error: {e}")
 
-async def stale_job_detector_task():
-    """Background task to detect and re-dispatch stale jobs."""
-    from api.config import get_settings
-    from services.supabase import get_supabase_client
-    from datetime import datetime, timezone, timedelta
-    from celery import Celery
-
-    logger.info(f"Starting stale job detector (interval: {STALE_JOB_CHECK_INTERVAL}s, threshold: {STALE_JOB_THRESHOLD}s)")
-    celery_app = Celery('workers', broker=settings.redis_url, backend=settings.redis_url)
-
-    while True:
-        try:
-            await asyncio.sleep(STALE_JOB_CHECK_INTERVAL)
-
-            supabase = get_supabase_client()
-            threshold_time = datetime.now(timezone.utc) - timedelta(seconds=STALE_JOB_THRESHOLD)
-
-            # Find jobs that are queued but have no worker and were created >5 min ago
-            result = supabase.table('jobs').select('job_id, task_id, created_at, enable_4k').eq('status', 'queued').is_('worker_id', 'null').lt('created_at', threshold_time.isoformat()).execute()
-
-            stale_jobs = result.data if result.data else []
-
-            for job in stale_jobs:
-                job_id = job['job_id']
-                task_id = job.get('task_id')
-
-                # Check if task failed or is missing from Redis
-                if task_id:
-                    try:
-                        from celery.result import AsyncResult
-                        task_result = AsyncResult(task_id, app=celery_app)
-                        task_state = task_result.state
-                        # FAILURE = task failed, PENDING = task missing from Redis (never delivered or lost)
-                        if task_state in ('FAILURE', 'PENDING'):
-                            logger.warning(f"Stale job {job_id} has {task_state} task, re-dispatching...")
-
-                            # Re-dispatch based on job type with delivery confirmation
-                            from workers.tasks import process_standard_compilation, process_4k_compilation
-                            from api.routes.jobs import submit_task_with_confirmation
-
-                            if job.get('enable_4k'):
-                                new_task = submit_task_with_confirmation(process_4k_compilation, job_id)
-                            else:
-                                new_task = submit_task_with_confirmation(process_standard_compilation, job_id)
-
-                            # Update task_id
-                            supabase.table('jobs').update({'task_id': new_task.id}).eq('job_id', job_id).execute()
-                            logger.info(f"Re-dispatched stale job {job_id} with new task {new_task.id}")
-                    except Exception as e:
-                        logger.error(f"Error checking/re-dispatching stale job {job_id}: {e}")
-
-        except asyncio.CancelledError:
-            logger.info("Stale job detector stopped")
-            break
-        except Exception as e:
-            logger.error(f"Stale job detector error: {e}")
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: launch background tasks
     keepalive_task = asyncio.create_task(smb_keepalive_task())
-    stale_detector_task = asyncio.create_task(stale_job_detector_task())
-    logger.info("Application started with SMB keep-alive and stale job detector")
+    logger.info("Application started with SMB keep-alive")
     yield
     # Shutdown: cancel background tasks
     keepalive_task.cancel()
-    stale_detector_task.cancel()
     try:
         await keepalive_task
-        await stale_detector_task
     except asyncio.CancelledError:
         pass
     logger.info("Application shutdown complete")

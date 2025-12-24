@@ -308,24 +308,29 @@ def upsert_videos_bulk(videos: List[Dict]) -> Dict:
                 logger.error(f"Failed to update video {video['video_id']}: {e}")
                 errors.append(f"Update failed for {video['video_id']}: {str(e)}")
 
-        # Step 4: Insert new videos
-        if videos_to_insert:
-            rows_to_insert = [
-                {
-                    "video_id": v["video_id"],
-                    "path_nyt": v["path_nyt"],
-                    "video_title": v["video_title"]
-                }
-                for v in videos_to_insert
-            ]
-            insert_errors = client.insert_rows_json(table_id, rows_to_insert)
-
-            if insert_errors:
-                logger.error(f"BigQuery insert errors: {insert_errors}")
-                errors.extend([str(e) for e in insert_errors])
-            else:
-                inserted_ids = [v["video_id"] for v in videos_to_insert]
-                logger.info(f"Inserted {len(inserted_ids)} new videos")
+        # Step 4: Insert new videos using SQL INSERT (not streaming)
+        # Using SQL INSERT instead of insert_rows_json to avoid streaming buffer
+        # which prevents immediate UPDATE/DELETE operations
+        for video in videos_to_insert:
+            insert_query = """
+            INSERT INTO `ybh-deployment-testing.ybh_assest_path.path` (video_id, path_nyt, video_title)
+            VALUES (@video_id, @path_nyt, @video_title)
+            """
+            insert_config = bigquery.QueryJobConfig(
+                query_parameters=[
+                    bigquery.ScalarQueryParameter("video_id", "STRING", video["video_id"]),
+                    bigquery.ScalarQueryParameter("path_nyt", "STRING", video["path_nyt"]),
+                    bigquery.ScalarQueryParameter("video_title", "STRING", video["video_title"]),
+                ]
+            )
+            try:
+                insert_job = client.query(insert_query, job_config=insert_config)
+                insert_job.result()  # Wait for completion
+                inserted_ids.append(video["video_id"])
+                logger.info(f"Inserted video {video['video_id']}")
+            except Exception as e:
+                logger.error(f"Failed to insert video {video['video_id']}: {e}")
+                errors.append(f"Insert failed for {video['video_id']}: {str(e)}")
 
         total_upserted = len(updated_ids) + len(inserted_ids)
         logger.info(f"Upsert complete: {len(updated_ids)} updated, {len(inserted_ids)} inserted")

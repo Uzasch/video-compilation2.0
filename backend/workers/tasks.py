@@ -212,11 +212,7 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             raise Exception("No items found for job")
 
         logger.info(f"Processing {len(items)} items in sequence")
-
-        # Step 0: Start prefetching files for next job (if exists) in background
-        logger.info("Step 0: Checking for next job in queue to prefetch")
         worker_name = task.request.hostname
-        check_and_prefetch_next_job(worker_name, logger, current_job_id=job_id)
 
         # Step 1a: Batch query all video paths upfront (1 query instead of N)
         logger.info("Step 1a: Batch querying video paths from BigQuery")
@@ -387,6 +383,9 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
         supabase.table('jobs').update({
             'progress_message': 'Encoding video...'
         }).eq('job_id', job_id).execute()
+
+        # Start prefetching files for next job in background (network is free during encoding)
+        check_and_prefetch_next_job(worker_name, logger, current_job_id=job_id)
 
         returncode = run_ffmpeg_with_progress(
             cmd,
