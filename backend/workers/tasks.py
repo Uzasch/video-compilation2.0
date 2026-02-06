@@ -287,7 +287,8 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
             source_files=files_to_copy,
             dest_dir=dest_dir,
             max_workers=5,  # Optimal for most cases
-            job_logger=logger
+            job_logger=logger,
+            job_id=job_id
         )
 
         # Check if all copies succeeded

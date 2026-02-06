@@ -406,7 +406,7 @@ def _copy_with_rsync(source: str, dest: Path) -> Optional[str]:
 
         logger.info(f"Copying with rsync: {source} → {dest_str}")
         logger.info(f"rsync command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=process_timeout)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=process_timeout)
 
         if result.returncode == 0:
             # Verify the file was created with correct name
@@ -445,7 +445,7 @@ def _copy_with_cp(source: str, dest: Path) -> Optional[str]:
             cmd = ["cp", source, str(dest)]
 
             logger.info(f"Copying with cp (attempt {attempt + 1}/3): {source} → {dest}")
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=True)
+            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, check=True)
 
             logger.info(f"✓ cp successful: {dest}")
             return str(dest)
@@ -485,7 +485,7 @@ def _copy_with_robocopy(source_file_path: Path, dest_path: Path, dest_file: Path
         ]
 
         logger.info(f"Copying with robocopy: {source_file_path} → {dest_file}")
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
 
         # Robocopy exit codes: 0-7 are success, 8+ are errors
         if result.returncode < 8:
@@ -536,7 +536,8 @@ def copy_files_parallel(
     source_files: List[Dict[str, str]],
     dest_dir: str,
     max_workers: int = 5,
-    job_logger: logging.Logger = None
+    job_logger: logging.Logger = None,
+    job_id: str = None
 ) -> Dict[str, Optional[str]]:
     """
     Copy multiple files in parallel using ThreadPoolExecutor.
@@ -614,6 +615,22 @@ def copy_files_parallel(
                 log.info(f"  ✓ Copied: {dest_filename}")
             else:
                 log.error(f"  ✗ Failed: {dest_filename}")
+
+            # Check for cancellation after each file completes
+            if job_id:
+                try:
+                    from services.supabase import get_supabase_client
+                    supabase = get_supabase_client()
+                    job_status = supabase.table('jobs').select('status').eq('job_id', job_id).execute()
+                    if job_status.data and job_status.data[0].get('status') == 'cancelled':
+                        log.warning(f"Job {job_id} cancelled - aborting remaining copies")
+                        for f in futures:
+                            f.cancel()
+                        raise Exception("Job cancelled by user during file copy")
+                except Exception as e:
+                    if "cancelled by user" in str(e).lower():
+                        raise
+                    log.debug(f"Cancellation check failed: {e}")
 
     # Summary
     successful = sum(1 for v in results.values() if v is not None)
