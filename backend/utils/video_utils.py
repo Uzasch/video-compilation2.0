@@ -41,26 +41,6 @@ def get_video_info(video_path: str) -> Optional[Dict]:
             video_path
         ]
 
-        # Wake up SMB mount by checking if path exists (handles stale connections)
-        path_exists = False
-        try:
-            path_check_start = time.time()
-            path_exists = Path(video_path).exists()
-            path_check_elapsed = time.time() - path_check_start
-
-            if path_check_elapsed > 2.0:
-                logger.warning(f"Slow path check ({path_check_elapsed:.2f}s) for: {video_path} | Network may be slow")
-
-            if not path_exists:
-                logger.warning(f"Path does not exist: {video_path}")
-                return None
-        except OSError as e:
-            logger.error(f"Network/IO error checking path {video_path}: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Path check failed for {video_path}: {e}")
-            return None
-
         logger.debug(f"Running ffprobe for: {video_path}")
         start_time = time.time()
 
@@ -68,6 +48,8 @@ def get_video_info(video_path: str) -> Optional[Dict]:
             cmd,
             capture_output=True,
             text=True,
+            encoding='utf-8',
+            errors='replace',  # Replace invalid UTF-8 bytes with replacement character
             timeout=180  # 3 minutes for slow SMB connections
         )
 
