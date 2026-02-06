@@ -51,7 +51,7 @@ export default function NewCompilation() {
         include_outro: includeOutro,
         enable_logos: enableLogos,
         manual_paths: manualPaths
-      })
+      }, { timeout: 600000 }) // 10 min - ffprobe on slow network shares can take 30s+ per file
       return data
     },
     onSuccess: (data) => {
@@ -90,7 +90,7 @@ export default function NewCompilation() {
   // Revalidate mutation - only checks paths, preserves user edits
   const revalidateMutation = useMutation({
     mutationFn: async (items) => {
-      const { data } = await apiClient.post('/jobs/revalidate', { items })
+      const { data } = await apiClient.post('/jobs/revalidate', { items }, { timeout: 600000 }) // 10 min
       return data
     },
     onSuccess: (data) => {
