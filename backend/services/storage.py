@@ -616,11 +616,16 @@ def copy_files_parallel(
             else:
                 log.error(f"  ✗ Failed: {dest_filename}")
 
-            # Check for cancellation after each file completes
+            # Update progress and check for cancellation after each file completes
             if job_id:
                 try:
                     from services.supabase import get_supabase_client
                     supabase = get_supabase_client()
+                    copied_count = sum(1 for v in results.values() if v is not None)
+                    total_count = len(source_files)
+                    supabase.table('jobs').update({
+                        'progress_message': f'Copying files... ({copied_count}/{total_count})'
+                    }).eq('job_id', job_id).execute()
                     job_status = supabase.table('jobs').select('status').eq('job_id', job_id).execute()
                     if job_status.data and job_status.data[0].get('status') == 'cancelled':
                         log.warning(f"Job {job_id} cancelled - aborting remaining copies")
@@ -630,7 +635,7 @@ def copy_files_parallel(
                 except Exception as e:
                     if "cancelled by user" in str(e).lower():
                         raise
-                    log.debug(f"Cancellation check failed: {e}")
+                    log.debug(f"Progress/cancellation check failed: {e}")
 
     # Summary
     successful = sum(1 for v in results.values() if v is not None)
