@@ -369,13 +369,13 @@ def _copy_with_rsync(source: str, dest: Path) -> Optional[str]:
     Copy file using rsync (Linux - best for network shares).
 
     Timeout calculation:
-        - Base: 300s (5 min) for files < 1GB
+        - Base: 1200s (20 min) for files < 10GB
         - Large files: file_size_gb * 120s per GB
-        - Min: 300s, Max: 3600s (1 hour)
+        - Min: 1200s (20 min), Max: 3600s (1 hour)
 
     Examples:
-        - 500 MB file: 300s (5 min)
-        - 5 GB file: 600s (10 min)
+        - 500 MB file: 1200s (20 min)
+        - 5 GB file: 1200s (20 min)
         - 10 GB file: 1200s (20 min)
         - 50 GB file: 3600s (1 hour, capped)
     """
@@ -384,8 +384,8 @@ def _copy_with_rsync(source: str, dest: Path) -> Optional[str]:
         file_size_bytes = os.path.getsize(source)
         file_size_gb = file_size_bytes / (1024 ** 3)
 
-        # Dynamic timeout: 120 seconds per GB, min 300s, max 3600s (1 hour)
-        io_timeout = max(300, min(3600, int(file_size_gb * 120)))
+        # Dynamic timeout: 120 seconds per GB, min 1200s (20 min), max 3600s (1 hour)
+        io_timeout = max(1200, min(3600, int(file_size_gb * 120)))
         process_timeout = io_timeout + 60  # Add 60s buffer for process overhead
 
         logger.info(f"File size: {file_size_gb:.2f} GB, timeout: {io_timeout}s")
@@ -438,7 +438,7 @@ def _copy_with_cp(source: str, dest: Path) -> Optional[str]:
     # Calculate dynamic timeout based on file size
     file_size_bytes = os.path.getsize(source)
     file_size_gb = file_size_bytes / (1024 ** 3)
-    timeout = max(300, min(3600, int(file_size_gb * 120)))
+    timeout = max(1200, min(3600, int(file_size_gb * 120)))
 
     for attempt in range(3):
         try:
