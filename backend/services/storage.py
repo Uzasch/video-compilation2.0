@@ -79,6 +79,10 @@ DOCKER_MOUNTS = {
     "Share3": "/mnt/share3",
     "Share4": "/mnt/share4",
     "Share5": "/mnt/share5",
+    "New_Share_1": "/mnt/new_share_1",
+    "New_Share_2": "/mnt/new_share_2",
+    "New_Share_3": "/mnt/new_share_3",
+    "New_Share_4": "/mnt/new_share_4",
 }
 
 # Check if running in Docker with isolated network (needs mount conversion)
