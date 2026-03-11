@@ -38,6 +38,12 @@ def is_cp_available() -> bool:
         logger.info(f"cp available: {_CP_AVAILABLE}")
     return _CP_AVAILABLE
 
+# Server IPs for each NAS
+NAS_SERVERS = {
+    "FIL-YBH-002": "192.168.1.6",
+    "FIL-YBH-003": "192.168.1.10",
+}
+
 # Drive letter mappings for SMB shares
 SHARE_MAPPINGS = {
     "Share": "S:",
@@ -50,6 +56,21 @@ SHARE_MAPPINGS = {
     "New_Share_3": "Q:",
     "New_Share_4": "R:",
 }
+
+# Which server each share lives on
+SHARE_SERVER = {
+    "Share": "192.168.1.6",
+    "Share2": "192.168.1.6",
+    "Share3": "192.168.1.6",
+    "Share4": "192.168.1.6",
+    "Share5": "192.168.1.6",
+    "New_Share_1": "192.168.1.10",
+    "New_Share_2": "192.168.1.10",
+    "New_Share_3": "192.168.1.10",
+    "New_Share_4": "192.168.1.10",
+}
+
+DEFAULT_NAS_IP = "192.168.1.6"
 
 # Docker mount path mappings (when running in Docker container)
 DOCKER_MOUNTS = {
@@ -113,7 +134,8 @@ def normalize_paths(paths: List[str]) -> List[str]:
                     path = f"{DOCKER_MOUNTS[share_name]}/{remaining}".rstrip("/")
                 else:
                     # Convert to UNC path
-                    path = f"\\\\192.168.1.6\\{share_name}\\{remaining}".replace("/", "\\")
+                    server_ip = SHARE_SERVER.get(share_name, DEFAULT_NAS_IP)
+                    path = f"\\\\{server_ip}\\{share_name}\\{remaining}".replace("/", "\\")
             else:
                 # Fallback: simple conversion
                 path = path.replace("smb://", "\\\\")
@@ -133,8 +155,9 @@ def normalize_paths(paths: List[str]) -> List[str]:
                     # Convert to Docker mount path
                     path = f"{DOCKER_MOUNTS[share_name]}/{remaining}".rstrip("/")
                 else:
-                    # Convert to UNC: \\192.168.1.6\Share4\...
-                    path = f"\\\\192.168.1.6\\{share_name}\\{remaining}"
+                    # Convert to UNC
+                    server_ip = SHARE_SERVER.get(share_name, DEFAULT_NAS_IP)
+                    path = f"\\\\{server_ip}\\{share_name}\\{remaining}"
                     path = path.replace("/", "\\")
             normalized.append(path)
             continue
@@ -156,7 +179,8 @@ def normalize_paths(paths: List[str]) -> List[str]:
                     path = f"{DOCKER_MOUNTS[share_name]}/{remaining}".replace("\\", "/")
                 else:
                     # Convert to UNC path
-                    path = f"\\\\192.168.1.6\\{share_name}\\{remaining}"
+                    server_ip = SHARE_SERVER.get(share_name, DEFAULT_NAS_IP)
+                    path = f"\\\\{server_ip}\\{share_name}\\{remaining}"
             normalized.append(path)
             continue
 
