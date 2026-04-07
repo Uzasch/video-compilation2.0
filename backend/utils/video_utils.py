@@ -47,9 +47,8 @@ def get_video_info(video_path: str) -> Optional[Dict]:
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True,
             encoding='utf-8',
-            errors='replace',  # Replace invalid UTF-8 bytes with replacement character
+            errors='replace',  # Handle non-UTF-8 characters in video metadata
             timeout=180  # 3 minutes for slow SMB connections
         )
 

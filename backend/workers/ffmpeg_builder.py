@@ -13,7 +13,8 @@ def is_gpu_available() -> bool:
             ['ffmpeg', '-f', 'lavfi', '-i', 'nullsrc=s=256x256:d=0.1',
              '-c:v', 'h264_nvenc', '-f', 'null', '-'],
             capture_output=True,
-            text=True,
+            encoding='utf-8',
+            errors='replace',  # Handle non-UTF-8 characters
             timeout=10
         )
         # Check for common GPU/NVENC errors

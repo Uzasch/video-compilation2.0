@@ -434,7 +434,7 @@ def _copy_with_rsync(source: str, dest: Path) -> Optional[str]:
 
         logger.info(f"Copying with rsync: {source} → {dest_str}")
         logger.info(f"rsync command: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=process_timeout)
+        result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=process_timeout)
 
         if result.returncode == 0:
             # Verify the file was created with correct name
@@ -473,7 +473,7 @@ def _copy_with_cp(source: str, dest: Path) -> Optional[str]:
             cmd = ["cp", source, str(dest)]
 
             logger.info(f"Copying with cp (attempt {attempt + 1}/3): {source} → {dest}")
-            result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout, check=True)
+            result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=timeout, check=True)
 
             logger.info(f"✓ cp successful: {dest}")
             return str(dest)
@@ -513,7 +513,7 @@ def _copy_with_robocopy(source_file_path: Path, dest_path: Path, dest_file: Path
         ]
 
         logger.info(f"Copying with robocopy: {source_file_path} → {dest_file}")
-        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=300)
+        result = subprocess.run(cmd, capture_output=True, encoding='utf-8', errors='replace', timeout=300)
 
         # Robocopy exit codes: 0-7 are success, 8+ are errors
         if result.returncode < 8:

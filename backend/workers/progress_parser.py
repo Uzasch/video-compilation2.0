@@ -60,7 +60,8 @@ def run_ffmpeg_with_progress(cmd: list, job_id: str, total_duration: float, logg
         cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        universal_newlines=True,
+        encoding='utf-8',
+        errors='replace',  # Handle non-UTF-8 characters in video metadata
         bufsize=1
     )
 
