@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Temp
     temp_dir: str = "temp"
 
+    # Log retention
+    log_retention_days: int = 7
+
     # Output
     output_dir: str = "output"
 

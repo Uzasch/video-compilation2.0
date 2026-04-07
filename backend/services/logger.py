@@ -1,6 +1,7 @@
 import logging
+import shutil
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from api.config import get_settings
 
 def setup_validation_logger(username: str):
@@ -50,6 +51,27 @@ def setup_validation_logger(username: str):
 
     return logger, str(log_file)
 
+
+def cleanup_old_logs(log_dir: str, retention_days: int = 7):
+    """Delete log date-directories older than retention_days."""
+    log_path = Path(log_dir)
+    if not log_path.exists():
+        return
+
+    cutoff = datetime.now() - timedelta(days=retention_days)
+
+    for entry in log_path.iterdir():
+        if not entry.is_dir():
+            continue
+        try:
+            dir_date = datetime.strptime(entry.name, '%Y-%m-%d')
+            if dir_date < cutoff:
+                shutil.rmtree(entry)
+                logging.info(f"Cleaned up old logs: {entry.name}")
+        except ValueError:
+            continue  # Skip non-date directories
+        except Exception as e:
+            logging.warning(f"Failed to clean up {entry.name}: {e}")
 
 def setup_job_logger(job_id: str, username: str, channel_name: str):
     """

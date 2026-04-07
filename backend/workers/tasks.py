@@ -6,7 +6,7 @@ from services.storage import (
     copy_files_parallel, copy_file_to_temp, copy_file_to_output,
     cleanup_temp_dir, normalize_path_for_server
 )
-from services.logger import setup_job_logger
+from services.logger import setup_job_logger, cleanup_old_logs
 from workers.ffmpeg_builder import build_unified_compilation_command, generate_ass_subtitle_file
 from workers.progress_parser import run_ffmpeg_with_progress
 from utils.video_utils import get_videos_info_batch
@@ -193,6 +193,13 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
     logger.info(f"=== Starting Compilation Job {job_id} ===")
     logger.info(f"Worker: {task.request.hostname} ({worker_type})")
     logger.info(f"Channel: {job['channel_name']}")
+
+    # Cleanup old logs to prevent disk space exhaustion
+    try:
+        settings = get_settings()
+        cleanup_old_logs(settings.log_dir, settings.log_retention_days)
+    except Exception:
+        pass  # Never let cleanup block a job
 
     try:
         # Update job status
