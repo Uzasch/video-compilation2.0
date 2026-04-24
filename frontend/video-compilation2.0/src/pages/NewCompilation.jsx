@@ -27,6 +27,7 @@ export default function NewCompilation() {
   const [videoIds, setVideoIds] = useState('')
   const [sequence, setSequence] = useState(null)
   const [enable4k, setEnable4k] = useState(false)
+  const [outputMxf, setOutputMxf] = useState(false)
   const [includeIntro, setIncludeIntro] = useState(true)
   const [includeOutro, setIncludeOutro] = useState(true)
   const [enableLogos, setEnableLogos] = useState(true)
@@ -202,6 +203,7 @@ export default function NewCompilation() {
       user_id: user.id,
       channel_name: channel,
       enable_4k: enable4k,
+      output_mxf: outputMxf,
       items: sequence.items
     })
   }
@@ -288,6 +290,15 @@ export default function NewCompilation() {
                     <p className="text-sm text-muted-foreground">Higher quality output</p>
                   </div>
                   <Switch id="4k-switch" checked={enable4k} onCheckedChange={setEnable4k} />
+                </div>
+
+                {/* MXF Toggle */}
+                <div className="flex items-center justify-between p-4 rounded-lg bg-background/50 border border-border/50">
+                  <div>
+                    <Label htmlFor="mxf-switch" className="text-base font-medium">MXF Output</Label>
+                    <p className="text-sm text-muted-foreground">Broadcast format (MPEG-2)</p>
+                  </div>
+                  <Switch id="mxf-switch" checked={outputMxf} onCheckedChange={setOutputMxf} />
                 </div>
 
                 {/* Logo Toggle */}

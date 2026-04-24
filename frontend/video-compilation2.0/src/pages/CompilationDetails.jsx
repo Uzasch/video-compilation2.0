@@ -361,6 +361,7 @@ export default function CompilationDetails() {
                   <p className="font-medium text-foreground flex items-center gap-2">
                     <Tv className="h-4 w-4" />
                     {job.enable_4k ? '4K Ultra HD' : 'Full HD 1080p'}
+                    {job.output_mxf && <span className="text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">MXF</span>}
                   </p>
                 </div>
                 <div>

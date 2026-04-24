@@ -214,6 +214,7 @@ function QueueManager({ queueData, onReorder, onCancel, isReordering }) {
                 <div className="flex items-center gap-2">
                   <span className="font-medium text-foreground">{job.channel_name}</span>
                   {job.enable_4k && <Badge variant="outline" className="text-xs">4K</Badge>}
+                  {job.output_mxf && <Badge variant="outline" className="text-xs">MXF</Badge>}
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <span>{job.display_name}</span>
@@ -258,6 +259,7 @@ function QueueManager({ queueData, onReorder, onCancel, isReordering }) {
                             <div className="flex items-center gap-2">
                               <span className="font-medium text-foreground">{job.channel_name}</span>
                               {job.enable_4k && <Badge variant="outline" className="text-xs">4K</Badge>}
+                              {job.output_mxf && <Badge variant="outline" className="text-xs">MXF</Badge>}
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {job.display_name} • {formatDate(job.created_at)}
@@ -575,6 +577,9 @@ function JobHistoryTable({ channelsData }) {
                               <Tv className="h-3 w-3 mr-1" />
                               4K
                             </Badge>
+                          )}
+                          {job.output_mxf && (
+                            <Badge variant="outline" className="text-xs">MXF</Badge>
                           )}
                         </div>
                       </TableCell>
