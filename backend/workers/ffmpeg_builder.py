@@ -43,7 +43,8 @@ def build_unified_compilation_command(
     job_items: List[Dict],
     output_path: str,
     job_id: str,
-    enable_4k: bool = False
+    enable_4k: bool = False,
+    output_mxf: bool = False
 ) -> List[str]:
     """
     Build FFmpeg command for unified sequence compilation.
@@ -189,89 +190,111 @@ def build_unified_compilation_command(
     use_gpu = check_gpu()
 
     # Encoding settings
-    # CRF 23 with maxrate 9M cap - smart quality allocation with bandwidth limit
-    if enable_4k:
-        if use_gpu:
-            # GPU-Accelerated (Nvidia NVENC) - 4K
-            # -cq is NVENC's equivalent of CRF
-            cmd.extend([
-                '-c:v', 'h264_nvenc',
-                '-preset', 'p3',
-                '-tune', 'hq',
-                '-rc', 'vbr',
-                '-cq', '23',
-                '-maxrate', '9M',
-                '-bufsize', '12M',
-                '-profile:v', 'high',
-                '-level', '5.1',
-                '-pix_fmt', 'yuv420p',
-                '-spatial-aq', '1',
-                '-temporal-aq', '1',
-            ])
-        else:
-            # CPU Fallback (libx264) - 4K
-            cmd.extend([
-                '-c:v', 'libx264',
-                '-preset', 'medium',
-                '-crf', '23',
-                '-maxrate', '9M',
-                '-bufsize', '12M',
-                '-profile:v', 'high',
-                '-level', '5.1',
-                '-pix_fmt', 'yuv420p',
-            ])
-
-        # Audio encoding (same for both)
+    if output_mxf:
+        # MXF output - MPEG-2 video with PCM audio (broadcast standard)
+        # NVENC does not support MPEG-2, always use CPU encoding
+        video_bitrate = '50M' if enable_4k else '30M'
+        bufsize = '36M' if enable_4k else '24M'
         cmd.extend([
-            '-c:a', 'aac',
-            '-b:a', '320k',
+            '-c:v', 'mpeg2video',
+            '-b:v', video_bitrate,
+            '-maxrate', video_bitrate,
+            '-bufsize', bufsize,
+            '-g', '12',
+            '-bf', '2',
+            '-pix_fmt', 'yuv422p',
+        ])
+        # PCM audio for MXF
+        cmd.extend([
+            '-c:a', 'pcm_s16le',
             '-ar', '48000',
             '-ac', '2',
         ])
+        # No -movflags for MXF
+        cmd.extend(['-y', output_path])
     else:
-        if use_gpu:
-            # GPU-Accelerated (Nvidia NVENC) - 1080p
-            # -cq is NVENC's equivalent of CRF
+        # MP4 output - H.264 with AAC audio
+        # CRF 23 with maxrate 9M cap - smart quality allocation with bandwidth limit
+        if enable_4k:
+            if use_gpu:
+                # GPU-Accelerated (Nvidia NVENC) - 4K
+                cmd.extend([
+                    '-c:v', 'h264_nvenc',
+                    '-preset', 'p3',
+                    '-tune', 'hq',
+                    '-rc', 'vbr',
+                    '-cq', '23',
+                    '-maxrate', '9M',
+                    '-bufsize', '12M',
+                    '-profile:v', 'high',
+                    '-level', '5.1',
+                    '-pix_fmt', 'yuv420p',
+                    '-spatial-aq', '1',
+                    '-temporal-aq', '1',
+                ])
+            else:
+                # CPU Fallback (libx264) - 4K
+                cmd.extend([
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-maxrate', '9M',
+                    '-bufsize', '12M',
+                    '-profile:v', 'high',
+                    '-level', '5.1',
+                    '-pix_fmt', 'yuv420p',
+                ])
+
+            # Audio encoding
             cmd.extend([
-                '-c:v', 'h264_nvenc',
-                '-preset', 'p3',
-                '-tune', 'hq',
-                '-rc', 'vbr',
-                '-cq', '23',
-                '-maxrate', '9M',
-                '-bufsize', '12M',
-                '-profile:v', 'main',
-                '-level', '4.1',
-                '-pix_fmt', 'yuv420p',
-                '-spatial-aq', '1',
-                '-temporal-aq', '1',
+                '-c:a', 'aac',
+                '-b:a', '320k',
+                '-ar', '48000',
+                '-ac', '2',
             ])
         else:
-            # CPU Fallback (libx264) - 1080p
+            if use_gpu:
+                # GPU-Accelerated (Nvidia NVENC) - 1080p
+                cmd.extend([
+                    '-c:v', 'h264_nvenc',
+                    '-preset', 'p3',
+                    '-tune', 'hq',
+                    '-rc', 'vbr',
+                    '-cq', '23',
+                    '-maxrate', '9M',
+                    '-bufsize', '12M',
+                    '-profile:v', 'main',
+                    '-level', '4.1',
+                    '-pix_fmt', 'yuv420p',
+                    '-spatial-aq', '1',
+                    '-temporal-aq', '1',
+                ])
+            else:
+                # CPU Fallback (libx264) - 1080p
+                cmd.extend([
+                    '-c:v', 'libx264',
+                    '-preset', 'medium',
+                    '-crf', '23',
+                    '-maxrate', '9M',
+                    '-bufsize', '12M',
+                    '-profile:v', 'main',
+                    '-level', '4.1',
+                    '-pix_fmt', 'yuv420p',
+                ])
+
+            # Audio encoding
             cmd.extend([
-                '-c:v', 'libx264',
-                '-preset', 'medium',
-                '-crf', '23',
-                '-maxrate', '9M',
-                '-bufsize', '12M',
-                '-profile:v', 'main',
-                '-level', '4.1',
-                '-pix_fmt', 'yuv420p',
+                '-c:a', 'aac',
+                '-b:a', '320k',
+                '-ar', '48000',
+                '-ac', '2',
             ])
 
-        # Audio encoding (same for both)
         cmd.extend([
-            '-c:a', 'aac',
-            '-b:a', '320k',
-            '-ar', '48000',
-            '-ac', '2',
+            '-movflags', '+faststart',
+            '-y',
+            output_path
         ])
-
-    cmd.extend([
-        '-movflags', '+faststart',
-        '-y',
-        output_path
-    ])
 
     return cmd
 

@@ -90,6 +90,7 @@ class SubmitJobRequest(BaseModel):
     user_id: str
     channel_name: str
     enable_4k: bool
+    output_mxf: bool = False
     items: List[JobItem]
 
 class SubmitJobResponse(BaseModel):
@@ -534,6 +535,7 @@ async def submit_job(request: SubmitJobRequest):
             'progress': 0,
             'progress_message': 'Job queued',
             'enable_4k': request.enable_4k,
+            'output_mxf': request.output_mxf,
             'default_logo_path': next((item.logo_path for item in request.items if item.logo_path), None),
             'final_duration': total_duration,
             'moved_to_production': False
