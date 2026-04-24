@@ -11,7 +11,7 @@ from workers.ffmpeg_builder import build_unified_compilation_command, generate_a
 from workers.progress_parser import run_ffmpeg_with_progress
 from utils.video_utils import get_videos_info_batch
 from api.config import get_settings
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from threading import Thread
 import time
@@ -125,6 +125,49 @@ def check_and_prefetch_next_job(worker_name: str, logger, current_job_id: str = 
     except Exception as e:
         logger.warning(f"  Could not check for next job: {e}")
         return None
+
+@app.task
+def resubmit_orphaned_jobs():
+    """
+    Periodic task: find jobs stuck in 'queued' for >15 minutes and resubmit them.
+    Handles cases where Celery task messages are lost (e.g. visibility timeout, worker crash).
+    The idempotency check in _process_compilation prevents duplicate processing.
+    """
+    supabase = get_supabase_client()
+
+    # Find jobs queued for more than 15 minutes
+    cutoff = (datetime.utcnow() - timedelta(minutes=15)).isoformat()
+    stuck_jobs = supabase.table('jobs').select('job_id, queue_name').eq(
+        'status', 'queued'
+    ).lt('created_at', cutoff).execute().data
+
+    if not stuck_jobs:
+        return {"resubmitted": 0}
+
+    task_map = {
+        'default_queue': process_standard_compilation,
+        'gpu_queue': process_gpu_compilation,
+        '4k_queue': process_4k_compilation,
+    }
+
+    resubmitted = []
+    for job in stuck_jobs:
+        job_id = job['job_id']
+        queue = job.get('queue_name', 'default_queue')
+        task_func = task_map.get(queue, process_standard_compilation)
+
+        try:
+            new_task = task_func.delay(job_id)
+            supabase.table('jobs').update({
+                'task_id': new_task.id,
+            }).eq('job_id', job_id).execute()
+            resubmitted.append(job_id)
+            logging.info(f"Resubmitted orphaned job {job_id} to {queue} (new task: {new_task.id})")
+        except Exception as e:
+            logging.error(f"Failed to resubmit orphaned job {job_id}: {e}")
+
+    return {"resubmitted": len(resubmitted), "job_ids": resubmitted}
+
 
 @app.task(bind=True, autoretry_for=(Exception,), retry_kwargs={'max_retries': 3, 'countdown': 10}, retry_backoff=True)
 def process_standard_compilation(self, job_id: str):
@@ -376,14 +419,16 @@ def _process_compilation(task: Task, job_id: str, worker_type: str):
 
         # Step 3: Build FFmpeg command
         logger.info("Step 3: Building FFmpeg command")
-        output_filename = f"{job['channel_name']}_{job_id}.mp4"
+        ext = "mxf" if job.get('output_mxf', False) else "mp4"
+        output_filename = f"{job['channel_name']}_{job_id}.{ext}"
         output_path = str(Path("temp") / job_id / output_filename)
 
         cmd = build_unified_compilation_command(
             job_items=processed_items,
             output_path=output_path,
             job_id=job_id,
-            enable_4k=job.get('enable_4k', False)
+            enable_4k=job.get('enable_4k', False),
+            output_mxf=job.get('output_mxf', False)
         )
 
         # Step 4: Run FFmpeg with progress tracking

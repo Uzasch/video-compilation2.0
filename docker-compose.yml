@@ -107,6 +107,28 @@ services:
       - app-network
     restart: unless-stopped
 
+  # Celery Beat - Periodic task scheduler (resubmits orphaned jobs)
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: video-compilation-celery-beat
+    command: celery -A workers.celery_app beat --loglevel=info
+    volumes:
+      - ./backend:/app
+      - /app/venv
+    env_file:
+      - ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - app-network
+    restart: unless-stopped
+
   # Frontend - Vite Dev Server
   frontend:
     build:
